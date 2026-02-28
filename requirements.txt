@@ -1,0 +1,7 @@
+flet>=0.21.0
+psutil
+structlog
+pydantic
+requests
+PyJWT
+py-machineid
