@@ -2,6 +2,10 @@ import flet as ft
 from typing import Optional
 from datetime import datetime
 
+from config.settings import (
+    COLOR_ZEN_BG, COLOR_ZEN_SIDEBAR, COLOR_ZEN_PRIMARY, 
+    COLOR_ZEN_GOLD, COLOR_ZEN_DIVIDER, COLOR_ZEN_TEXT_MAIN, COLOR_ZEN_TEXT_DIM
+)
 from ui.views.scan_view import ScanView
 from ui.views.migration_view import MigrationView
 from ui.views.auth_view import AuthView
@@ -9,11 +13,9 @@ from ui.views.result_view import ResultView
 from ui.views.splash import SplashView
 from core.updater import check_for_updates
 
-
 class ZenCleanApp(ft.Column):
     """
-    根视图管理器。继承 ft.Column 替代已废弃的 ft.UserControl。
-    负责侧边导航栏、页面容器、路由切换与全局激活状态管理。
+    根视图管理器。负责沉浸式顶栏、侧边导航栏、页面容器、路由切换。
     """
 
     def __init__(self, page: ft.Page):
@@ -23,8 +25,39 @@ class ZenCleanApp(ft.Column):
         self.lease_expiry_date: Optional[str] = None
         self.total_expiry_date: Optional[str] = None
 
-        # 分割线：单独持引用，避免硬编码 controls 索引
-        self._divider = ft.VerticalDivider(width=1, color="#333333", visible=False)
+        _drag_content = ft.Container(
+            content=ft.Stack([
+                ft.Row([
+                    ft.Container(width=5), # 左侧微调
+                    ft.Image(src="icon.png", width=18, height=18),
+                    ft.Text("禅清 (ZenClean)", size=12, color=COLOR_ZEN_TEXT_DIM, weight=ft.FontWeight.W_500),
+                ], spacing=10, alignment=ft.MainAxisAlignment.START),
+                ft.Container(
+                    content=ft.Text("互为螺旋 - C盘AI极速清理大师", size=13, color=COLOR_ZEN_GOLD, weight=ft.FontWeight.BOLD),
+                    alignment=ft.alignment.center,
+                ),
+            ], expand=True),
+            padding=ft.padding.only(left=15, top=8, bottom=8, right=10),
+        )
+
+        _window_controls = ft.Row([
+            ft.IconButton(ft.icons.MINIMIZE, icon_size=16, icon_color=COLOR_ZEN_TEXT_DIM, on_click=self._window_minimize),
+            ft.IconButton(ft.icons.CROP_SQUARE, icon_size=16, icon_color=COLOR_ZEN_TEXT_DIM, on_click=self._window_maximize),
+            ft.IconButton(ft.icons.CLOSE, icon_size=16, icon_color=COLOR_ZEN_TEXT_DIM, hover_color=ft.colors.RED_600, on_click=self._window_close),
+        ], spacing=0)
+
+        self._title_bar = ft.Container(
+            content=ft.Row([
+                ft.WindowDragArea(content=_drag_content, expand=True),
+                _window_controls,
+            ]),
+            bgcolor=COLOR_ZEN_SIDEBAR, # 保持与侧边栏一致的曜石灰
+            height=45,
+            visible=False 
+        )
+
+        # 分割线
+        self._divider = ft.VerticalDivider(width=1, color=COLOR_ZEN_DIVIDER, visible=False)
 
         # 侧边导航栏
         self._nav_rail = ft.NavigationRail(
@@ -32,7 +65,10 @@ class ZenCleanApp(ft.Column):
             label_type=ft.NavigationRailLabelType.ALL,
             min_width=80,
             min_extended_width=200,
-            bgcolor="#1A1A1A",
+            bgcolor=COLOR_ZEN_SIDEBAR,
+            unselected_label_text_style=ft.TextStyle(color=COLOR_ZEN_TEXT_DIM, size=12),
+            selected_label_text_style=ft.TextStyle(color=COLOR_ZEN_PRIMARY, size=12, weight=ft.FontWeight.BOLD),
+            group_alignment=-0.9, # 让图标整体靠上方一点
             destinations=[
                 ft.NavigationRailDestination(
                     icon=ft.icons.CLEANING_SERVICES_OUTLINED,
@@ -58,11 +94,12 @@ class ZenCleanApp(ft.Column):
         self._page_container = ft.Container(
             expand=True,
             padding=ft.padding.all(20),
-            bgcolor="#0D0D0D",
+            bgcolor=COLOR_ZEN_BG,
         )
 
-        # 根布局：左右分割
+        # 根布局：加入顶栏，下方左右分割
         self.controls = [
+            self._title_bar,
             ft.Row(
                 controls=[
                     self._nav_rail,
@@ -134,6 +171,7 @@ class ZenCleanApp(ft.Column):
         if route != "/":
             self._nav_rail.visible = True
             self._divider.visible = True
+            self._title_bar.visible = True
 
         self._page_container.content = self._view_cache[route]
         self.update()
@@ -143,3 +181,19 @@ class ZenCleanApp(ft.Column):
         if hasattr(view, "start"):
             view.start()
 
+    def _window_minimize(self, e):
+        self.page.window.state = ft.WindowState.MINIMIZED
+        self.page.update()
+
+    def _window_maximize(self, e):
+        self.page.window.state = ft.WindowState.NORMAL if self.page.window.state == ft.WindowState.MAXIMIZED else ft.WindowState.MAXIMIZED
+        self.page.update()
+
+    def _window_close(self, e):
+        try:
+            if hasattr(self.page.window, "close"):
+                self.page.window.close()
+            else:
+                self.page.window.destroy()
+        except Exception:
+            self.page.window_destroy()

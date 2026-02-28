@@ -1,7 +1,9 @@
 import flet as ft
 import threading
 import time
-
+from config.settings import (
+    COLOR_ZEN_BG, COLOR_ZEN_PRIMARY, COLOR_ZEN_TEXT_MAIN, COLOR_ZEN_TEXT_DIM
+)
 
 class SplashView(ft.Container):
     def __init__(self, app):
@@ -9,29 +11,31 @@ class SplashView(ft.Container):
         super().__init__(
             content=ft.Column(
                 [
-                    ft.Icon(
-                        name=ft.icons.CLEANING_SERVICES_ROUNDED,
-                        size=80,
-                        color="#00D4AA",
+                    ft.Image(
+                        src="icon.png",
+                        width=100,
+                        height=100,
+                        fit=ft.ImageFit.CONTAIN,
                     ),
                     ft.Text(
                         "ZenClean 禅清",
                         size=40,
                         weight=ft.FontWeight.BOLD,
-                        color="white",
+                        color=COLOR_ZEN_TEXT_MAIN,
                     ),
                     ft.Text(
                         "初始化深层防护扫描引擎...",
                         size=16,
-                        color="#888888",
+                        color=COLOR_ZEN_TEXT_DIM,
                     ),
                     ft.Container(height=30),
-                    ft.ProgressBar(width=400, color="#00D4AA", bgcolor="#333333"),
+                    ft.ProgressBar(width=400, color=COLOR_ZEN_PRIMARY, bgcolor="#333333"),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             expand=True,
+            bgcolor=COLOR_ZEN_BG,
             alignment=ft.alignment.center,
         )
 

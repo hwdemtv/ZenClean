@@ -171,14 +171,13 @@ def dispatch(path: str, size_bytes: int = 0) -> NodeDict:
     node = analyze(path, size_bytes)
 
     if node["risk_level"] == "UNKNOWN":
-        # 延迟导入避免循环依赖，同时为第三阶段替换保留最小改动面
-        from ai import cloud_mock as cloud_engine
+        # 正式接入真实云端引擎
+        from ai import cloud_engine
         sanitized = sanitize_path(path)
         cloud_result = cloud_engine.query(sanitized)
         node["ai_advice"] = cloud_result["ai_advice"]
-        # 第一阶段 cloud_mock 始终返回 UNKNOWN，risk_level 不变
-        # 第三阶段真实引擎可能返回非 UNKNOWN，届时取消下面注释：
-        # node["risk_level"] = cloud_result["risk_level"]
+        # 第二阶段及以后，采用云模型真实的危机研判
+        node["risk_level"] = cloud_result.get("risk_level", "UNKNOWN")
 
     return node
 

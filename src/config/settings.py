@@ -24,7 +24,7 @@ def _get_downloads_folder() -> str:
 # ── 版本 ──────────────────────────────────────────────────────────────────────
 APP_NAME = "ZenClean"
 APP_VERSION = "0.1.0"          # MVP 首发版
-APP_DISPLAY_NAME = "ZenClean (禅清)"
+APP_DISPLAY_NAME = "禅清 (ZenClean)"
 
 # ── 路径 ──────────────────────────────────────────────────────────────────────
 # 用户数据根目录：%AppData%\ZenClean
@@ -123,12 +123,39 @@ NTP_MAX_DRIFT_SECONDS = 300
 # 联网请求超时（秒）
 LICENSE_REQUEST_TIMEOUT = 8
 
-# ── UI 主题 ───────────────────────────────────────────────────────────────────
-THEME_BG_COLOR = "#0D0D0D"
-THEME_ACCENT_COLOR = "#00D4AA"
+# ── AI 云端代理网关 ────────────────────────────────────────────────────────────
+# 后端网关基地址（hw-license-center 部署的 AI 代理路由）
+AI_GATEWAY_BASE_URL = "https://km.hwdemtv.com/api/v1/ai"
+# SSE 流式分析端点（POST，携带 JWT Authorization）
+AI_ANALYZE_URL = f"{AI_GATEWAY_BASE_URL}/chat/completions"
+# 额度查询端点（GET，携带 JWT Authorization）
+AI_QUOTA_URL = f"{AI_GATEWAY_BASE_URL}/quota"
+# 单次请求超时（秒）——SSE 流式传输可能需要稍长的时间
+AI_REQUEST_TIMEOUT = 8
+# 本地 60 秒内最大请求次数（客户端侧限流，与服务端限流同步）
+AI_CLIENT_RATE_LIMIT = 10
+AI_CLIENT_RATE_WINDOW = 60  # 秒
+
+# ── UI 主题 (温润禅意方案) ────────────────────────────────────────────────────────
+COLOR_ZEN_BG = "#1A1A1A"      # 曜石灰 - 主背景
+COLOR_ZEN_SIDEBAR = "#212121" # 曜石灰(浅) - 侧边栏
+COLOR_ZEN_PRIMARY = "#009688" # 水墨青/玉石绿 - 沉稳内敛的核心色
+COLOR_ZEN_GOLD = "#D4AF37"    # 檀木金 - VIP/尊贵/品牌
+COLOR_ZEN_DANGER = "#E74C3C"  # 朱砂红 - 警告/删除/退出
+COLOR_ZEN_DIVIDER = "#333333" # 内敛灰 - 分割线/装饰
+COLOR_ZEN_TEXT_MAIN = "#E0E0E0" # 灰白 - 主文字
+COLOR_ZEN_TEXT_DIM = "#9E9E9E"  # 浅灰 - 副文字
+
+# 兼容旧代码引用 (渐进式替换)
+THEME_BG_COLOR = COLOR_ZEN_BG
+THEME_ACCENT_COLOR = COLOR_ZEN_PRIMARY
+
 WINDOW_WIDTH = 1000
 WINDOW_HEIGHT = 680
 
 # ── 版本更新检查 ───────────────────────────────────────────────────────────────
 # 留空则跳过更新检查（CI/离线环境使用）
 UPDATE_CHECK_URL = ""  # e.g. "https://api.github.com/repos/owner/zenclean/releases/latest"
+
+# ── 缓存 ───────────────────────────────────────────────────────────────────────
+AI_CACHE_FILE = APP_DATA_DIR / "ai_cache.json"

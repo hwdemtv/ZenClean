@@ -1,6 +1,9 @@
 import flet as ft
 from collections import defaultdict
-
+from config.settings import (
+    COLOR_ZEN_PRIMARY, COLOR_ZEN_BG, COLOR_ZEN_GOLD, 
+    COLOR_ZEN_DANGER, COLOR_ZEN_TEXT_MAIN, COLOR_ZEN_TEXT_DIM, COLOR_ZEN_DIVIDER
+)
 
 # 分类ID → 中文标签 + 图标
 _CATEGORY_META: dict[str, tuple[str, str]] = {
@@ -21,7 +24,6 @@ _CATEGORY_META: dict[str, tuple[str, str]] = {
 
 MAX_ITEMS_PER_GROUP = 10  # 每个分组默认展示的文件条目数
 
-
 def _fmt_size(size_bytes: int) -> str:
     """将字节数格式化为人类可读字符串。"""
     if size_bytes >= 1024 ** 3:
@@ -31,7 +33,6 @@ def _fmt_size(size_bytes: int) -> str:
     if size_bytes >= 1024:
         return f"{size_bytes / 1024:.0f} KB"
     return f"{size_bytes} B"
-
 
 class ResultView(ft.Column):
     def __init__(self, app):
@@ -44,7 +45,7 @@ class ResultView(ft.Column):
         self.lbl_total_size = ft.Text(
             "待清理: 0.00 GB",
             size=20,
-            color=ft.colors.RED_400,
+            color=COLOR_ZEN_DANGER,
             weight=ft.FontWeight.BOLD,
         )
 
@@ -55,7 +56,7 @@ class ResultView(ft.Column):
                         ft.icons.ARROW_BACK,
                         on_click=lambda _: self.app.navigate_to("/scan"),
                     ),
-                    ft.Text("扫描结果揭晓", size=24, weight=ft.FontWeight.BOLD),
+                    ft.Text("扫描结果揭晓", size=24, weight=ft.FontWeight.BOLD, color=COLOR_ZEN_TEXT_MAIN),
                 ]),
                 self.lbl_total_size,
             ],
@@ -66,6 +67,7 @@ class ResultView(ft.Column):
             "取消/重置",
             icon=ft.icons.REFRESH,
             visible=False,
+            style=ft.ButtonStyle(color=COLOR_ZEN_TEXT_DIM),
             on_click=self._reset_selection,
         )
 
@@ -73,7 +75,7 @@ class ResultView(ft.Column):
             "智能体检一键清理" if app.is_activated else "🔑 VIP专享: 一键智能清除",
             icon=ft.icons.BACKSPACE_ROUNDED,
             color="white",
-            bgcolor=ft.colors.GREEN_700 if app.is_activated else ft.colors.GREY_800,
+            bgcolor=COLOR_ZEN_PRIMARY if app.is_activated else "#333333",
             disabled=not app.is_activated,
             height=50,
             expand=True,
@@ -84,12 +86,11 @@ class ResultView(ft.Column):
         self.groups_col = ft.ListView(expand=True, spacing=8)
 
         self.controls = [header, self.groups_col, ft.Row([self.btn_reset, self.btn_clean])]
-        self._build_data()  # 初始构建（不调用 update）
+        self._build_data()  # 初始构建
 
     # ── 数据处理与 UI 渲染 ──────────────────────────────────────────────────
 
     def _build_data(self):
-        """构建分组数据 UI（不调用 self.update，适用于 __init__ 期间）"""
         nodes = getattr(self.app, "scan_nodes", [])
         self.groups_col.controls.clear()
         self._total_size_bytes = 0
@@ -97,7 +98,7 @@ class ResultView(ft.Column):
         if not nodes:
             self.groups_col.controls.append(
                 ft.Container(
-                    content=ft.Text("未发现任何可清理项", color=ft.colors.GREEN_400),
+                    content=ft.Text("未发现任何可清理项", color=COLOR_ZEN_PRIMARY),
                     alignment=ft.alignment.center,
                     padding=20,
                 )
@@ -145,31 +146,29 @@ class ResultView(ft.Column):
             # 更新 UI 中的分组标题
             title_row = ft.Row([
                 ft.Row([
-                    ft.Icon(cat_icon, color="#00D4AA", size=20),
-                    ft.Text(f"{cat_label}", weight=ft.FontWeight.BOLD, size=14),
-                ], expand=True), # 左侧：图标 + 文字（占据所有剩余空间并把右侧推挤）
+                    ft.Icon(cat_icon, color=COLOR_ZEN_PRIMARY, size=20),
+                    ft.Text(f"{cat_label}", weight=ft.FontWeight.BOLD, size=14, color=COLOR_ZEN_TEXT_MAIN),
+                ], expand=True),
                 ft.Row([
-                    # 右侧：全选框 + 统计信息
                     ft.Checkbox(
                         value=group_check_state,
                         tristate=True,
                         tooltip="全选/取消本组",
+                        fill_color=COLOR_ZEN_PRIMARY,
                         on_change=lambda e, ns=cat_nodes: self._select_all(ns, e.control.value),
                     ),
-                    ft.VerticalDivider(width=1),
-                    # 统计信息：文件数（已选/总计）
+                    ft.VerticalDivider(width=1, color=COLOR_ZEN_DIVIDER),
                     ft.Container(
-                        content=ft.Text(f"{len(checked_in_cat)}/{len(cat_nodes)} 项", size=12, color=ft.colors.GREY_400),
-                        width=90, # 固定宽度以保证左侧复选框对齐
+                        content=ft.Text(f"{len(checked_in_cat)}/{len(cat_nodes)} 项", size=12, color=COLOR_ZEN_TEXT_DIM),
+                        width=90,
                         alignment=ft.alignment.center_right,
                     ),
-                    # 统计信息：大小（已选/总计）
                     ft.Container(
                         content=ft.Text(
                             f"{_fmt_size(checked_size)} / {_fmt_size(total_size)}",
-                            size=13, weight=ft.FontWeight.W_600, color=ft.colors.ORANGE_400,
+                            size=13, weight=ft.FontWeight.W_600, color=COLOR_ZEN_GOLD,
                         ),
-                        width=140, # 给予固定宽度，让数值即使长度跳动，整体布局也保持对齐
+                        width=140,
                         alignment=ft.alignment.center_right,
                     ),
                 ], alignment=ft.MainAxisAlignment.END, spacing=10),
@@ -196,7 +195,7 @@ class ResultView(ft.Column):
                             on_click=lambda _, c=cat: self._collapse_group(c),
                         ),
                         padding=ft.padding.only(left=30, top=5, bottom=5),
-                        bgcolor="#252525",
+                        bgcolor="#2A2A2A",
                         border_radius=5,
                     ))
 
@@ -257,8 +256,8 @@ class ResultView(ft.Column):
                     title=title_row,
                     controls=file_controls,
                     initially_expanded=False,
-                    bgcolor="#1A1A1A",
-                    collapsed_bgcolor="#141414",
+                    bgcolor="#212121",
+                    collapsed_bgcolor="#1A1A1A",
                     shape=ft.RoundedRectangleBorder(radius=8),
                 )
             )
@@ -288,13 +287,13 @@ class ResultView(ft.Column):
         
         if not self.is_confirm_mode:
             self.btn_clean.text = "智能体检一键清理"
-            self.btn_clean.bgcolor = ft.colors.GREEN_700
+            self.btn_clean.bgcolor = COLOR_ZEN_PRIMARY
             self.btn_clean.icon = ft.icons.AUTO_FIX_HIGH
             self.btn_reset.visible = False
         else:
             checked_count = sum(1 for n in self.app.scan_nodes if n.get("is_checked", False))
             self.btn_clean.text = f"确认清理 {checked_count} 项 ({_fmt_size(self._total_size_bytes)})"
-            self.btn_clean.bgcolor = ft.colors.RED_700
+            self.btn_clean.bgcolor = COLOR_ZEN_DANGER
             self.btn_clean.icon = ft.icons.DELETE_FOREVER
             self.btn_reset.visible = True
 
@@ -348,8 +347,8 @@ class ResultView(ft.Column):
             title=ft.Text("⚠️ 确认开始清理？"),
             content=ft.Text(f"系统即将清理 {len(nodes)} 个项，共计 {_fmt_size(self._total_size_bytes)}。\n\n当前为【模拟模式】，不会真正改动磁盘。"),
             actions=[
-                ft.TextButton("我再想想", on_click=lambda _: self._close_dlg(dlg)),
-                ft.ElevatedButton("开始清理", bgcolor=ft.colors.RED, color="white", on_click=lambda _: self._run_clean(dlg, len(nodes))),
+                ft.TextButton("我再想想", on_click=lambda _: self._close_dlg(dlg), style=ft.ButtonStyle(color=COLOR_ZEN_TEXT_DIM)),
+                ft.ElevatedButton("开始清理", bgcolor=COLOR_ZEN_DANGER, color="white", on_click=lambda _: self._run_clean(dlg, len(nodes))),
             ]
         )
         self.app.page.overlay.append(dlg)
@@ -408,11 +407,11 @@ class ResultView(ft.Column):
 
         dlg = ft.AlertDialog(
             modal=True,
-            title=ft.Row([ft.Icon(ft.icons.WARNING_AMBER_ROUNDED, color=ft.colors.RED_400), ft.Text("高能预警：清空回收站")]),
+            title=ft.Row([ft.Icon(ft.icons.WARNING_AMBER_ROUNDED, color=COLOR_ZEN_DANGER), ft.Text("高能预警：清空回收站")]),
             content=ft.Text("部分争议文件（MEDIUM/HIGH级别）已移入系统回收站作为您的最后防线。\n\n是否立即【彻底清空系统回收站】斩草除根？\n警告：此操作不可逆转！"),
             actions=[
-                ft.TextButton("先保留在回收站", on_click=_on_cancel),
-                ft.ElevatedButton("彻底清空 (免责)", bgcolor=ft.colors.RED_700, color="white", on_click=_on_confirm),
+                ft.TextButton("先保留在回收站", on_click=_on_cancel, style=ft.ButtonStyle(color=COLOR_ZEN_TEXT_DIM)),
+                ft.ElevatedButton("彻底清空 (免责)", bgcolor=COLOR_ZEN_DANGER, color="white", on_click=_on_confirm),
             ],
             actions_alignment=ft.MainAxisAlignment.END,
         )

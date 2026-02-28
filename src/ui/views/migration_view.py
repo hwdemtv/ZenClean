@@ -33,8 +33,8 @@ class MigrationView(ft.Column):
         # 加载状态提示（数据读取期间显示）
         self._loading = ft.Row(
             [
-                ft.ProgressRing(width=18, height=18, stroke_width=2, color="#00D4AA"),
-                ft.Text("正在读取系统文件夹信息...", color="#AAAAAA", size=13),
+                ft.ProgressRing(width=18, height=18, stroke_width=2, color=COLOR_ZEN_PRIMARY),
+                ft.Text("正在读取系统文件夹信息...", color="#9E9E9E", size=13),
             ],
             spacing=10,
         )
@@ -52,7 +52,7 @@ class MigrationView(ft.Column):
                     ft.Text("系统文件夹无损搬家", size=24, weight=ft.FontWeight.BOLD),
                     ft.Text(
                         "将桌面、下载等核心默认目录物理移动至其他盘符，根治 C 盘红线。",
-                        color="#AAAAAA",
+                        color="#9E9E9E",
                     ),
                 ]),
                 ft.Divider(color="#333333"),
@@ -117,7 +117,7 @@ class MigrationView(ft.Column):
         if on_c:
             action_btn = ft.ElevatedButton(
                 "迁移至其他盘",
-                bgcolor="#00D4AA",
+                bgcolor="#009688",
                 color="white",
                 on_click=lambda e, k=reg_key, p=path: self._on_migrate(e, k, p),
             )
@@ -148,7 +148,7 @@ class MigrationView(ft.Column):
                 action_btn,
             ]),
             padding=15,
-            bgcolor="#1E1E1E",
+            bgcolor="#252525",
             border_radius=8,
             margin=ft.margin.only(bottom=10),
         )
