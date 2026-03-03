@@ -179,7 +179,7 @@ def query(sanitized_path: str) -> dict:
         return _fallback("客户端请求频率超限，请稍后再试。", dir_path)
 
     # 3. 获取本地缓存的 VIP JWT Token
-    token, _ = _load_local_token()
+    token, _, _ = _load_local_token()
     if not token:
         logger.warning("未找到有效的 JWT Token，无法请求 AI 网关")
         return _fallback("请先激活 VIP 以使用云端 AI 分析功能。", dir_path)
@@ -250,7 +250,7 @@ def query(sanitized_path: str) -> dict:
 
         elif res.status_code in (401, 403):
             logger.warning(f"云端 AI 鉴权失败: HTTP {res.status_code}")
-            return _fallback("VIP 授权验证失败，请重新激活。", dir_path)
+            return _fallback("[AUTH_FAILED] VIP 授权验证失败或已被吊销，请重新激活。", dir_path)
 
         else:
             logger.warning(f"云端 AI 请求失败: HTTP {res.status_code}")
@@ -282,7 +282,7 @@ def get_quota() -> dict | None:
     查询当前用户的 AI 每日剩余额度。
     返回: {"daily_limit": 100, "used_today": 5, "remaining": 95} 或 None
     """
-    token, _ = _load_local_token()
+    token, _, _ = _load_local_token()
     if not token:
         return None
 

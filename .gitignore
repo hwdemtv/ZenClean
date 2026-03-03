@@ -39,6 +39,8 @@ venv.bak/
 *.dat
 *.tmp
 *.log
+logs/
+ai_cache.json
 .pytest_cache/
 tests/.pytest_cache/
 

@@ -404,3 +404,30 @@ POST hw-license-center /api/v1/verify
 | `multiprocessing` 在 `--onefile` 模式下 spawn 失败 | 中 | 主入口添加 `multiprocessing.freeze_support()` |
 | hw-license-center 服务宕机 | 低 | 缓存 JWT 保证 24 小时离线可用，到期后降级提示 |
 | 杀毒软件误报（因涉及系统目录操作） | 高 | 第一阶段准备 360/火绒白名单申请文档，暂不签 EV 证书 |
+
+---
+
+## 10. 第一阶段遗留/补强任务 (待第二阶段前夕/期间穿插完成)
+
+虽然核心功能闭环（扫描→AI判定→二次确认→清理/发送至回收站→无损搬家）已完全跑通，但由于第一阶段采用了“糙快猛”冲刺策略，目前代码库仍有以下工程质量与体验层面的待办事项。这些**不阻塞**后续特性的开发，可作为架构优化的储备：
+
+### 10.1 单元测试补齐 (Unit Testing)
+- **现状**：已搭建 `tests/test_engine.py` 框架。
+- **目标**：补充 `core/whitelist.py` 和 `ai/local_engine.py` 的边界测试用例代码，确保规则集覆盖率（特别是阻止系统核心目录被删的安全红线）。
+
+### 10.2 UI 组件精简与独立化 (UI Componentization)
+- **现状**：`file_list_item` (文件单行) 和 `risk_badge` (风险徽标) 等渲染逻辑目前硬编码在 `ui/views/result_view.py` 的构建方法中。
+- **目标**：将其抽离至 `ui/components/` 模块下作为独立类，降低 `ResultView` 的代码圈复杂度，便于后续维护和按需懒加载。
+
+### 10.3 大规模数据压测与动画核对其流 (Stress Test & Animation)
+- **现状**：`ListView` 已实现基础的虚拟化滚动。空间释放有数字更新反馈。
+- **目标**：
+  1. 使用脚本生成 5 万个模拟文件的结果集，压测滚动帧率是否稳定在 30fps 以上。
+  2. 调优清理完成后的“数字滚动递减/递增”动画（目前为直接变值响应），提升用户获得感。
+
+### 10.4 发行版打包与分发 (Packaging & Distribution)
+- **现状**：开发者可通过 `python src/main.py` 顺畅运行。
+- **目标**：
+  1. 编写完整的 `PyInstaller` `.spec` 脚本，将所有依赖项（包括 `file_kb.json` 和 `assets/` 图片）打包。
+  2. 解决多进程（`multiprocessing`）在 Windows 可执行文件下的 spawn 问题。
+  3. 控制终态 `.exe` 体积，并视情况引入 Inno Setup 制作安装包。

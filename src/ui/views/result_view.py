@@ -41,6 +41,7 @@ class ResultView(ft.Column):
         self._total_size_bytes = 0
         self.is_confirm_mode = False  # 是否处于“确认清理阶段”
         self._expanded_cats: dict[str, int] = {}  # 分组 category → 当前显示条数上限
+        self._expanded_tile_keys: set[str] = set()  # 记录当前展开的分组 ID
 
         self.lbl_total_size = ft.Text(
             "待清理: 0.00 GB",
@@ -208,6 +209,12 @@ class ResultView(ft.Column):
                     n["is_checked"] = e.control.value
                     self._update_ui_stats()
 
+                def _open_location(e, n=node):
+                    import os
+                    target_dir = os.path.dirname(n["path"])
+                    if os.path.exists(target_dir):
+                        os.startfile(target_dir)
+
                 file_controls.append(
                     ft.Container(
                         content=ft.Row([
@@ -216,8 +223,15 @@ class ResultView(ft.Column):
                             ft.Text(node["path"][-70:] if len(node["path"]) > 75 else node["path"],
                                     size=12, expand=True, font_family="Consolas"),
                             ft.Text(_fmt_size(node.get("size_bytes", 0)), size=12, color=ft.colors.GREY_500),
-                        ]),
-                        padding=ft.padding.only(left=10, right=10),
+                            ft.IconButton(
+                                icon=ft.icons.FOLDER_OPEN_ROUNDED,
+                                icon_size=16,
+                                icon_color=COLOR_ZEN_PRIMARY,
+                                tooltip="打开文件所在目录 (手动清理)",
+                                on_click=_open_location
+                            ),
+                        ], spacing=5),
+                        padding=ft.padding.only(left=10, right=5),
                         tooltip=node["ai_advice"],
                     )
                 )
@@ -251,11 +265,18 @@ class ResultView(ft.Column):
                     padding=ft.padding.only(top=5, bottom=5),
                 ))
 
+            def _on_tile_change(e, k=cat):
+                if e.data == "true":
+                    self._expanded_tile_keys.add(k)
+                else:
+                    self._expanded_tile_keys.discard(k)
+
             self.groups_col.controls.append(
                 ft.ExpansionTile(
                     title=title_row,
                     controls=file_controls,
-                    initially_expanded=False,
+                    initially_expanded=cat in self._expanded_tile_keys,
+                    on_change=_on_tile_change,
                     bgcolor="#212121",
                     collapsed_bgcolor="#1A1A1A",
                     shape=ft.RoundedRectangleBorder(radius=8),
@@ -300,7 +321,7 @@ class ResultView(ft.Column):
     # ── 交互逻辑 ────────────────────────────────────────────────────────────
 
     def _on_main_button_click(self, e):
-        """主按钮点：第一阶段切换确认模式并预选；第二阶段执行清理。"""
+        """主按钮点击：第一阶段切换确认模式并预选；第二阶段执行清理。"""
         if not self.is_confirm_mode:
             # 模式 1 -> 模式 2：AI 预选
             for node in self.app.scan_nodes:
@@ -344,11 +365,11 @@ class ResultView(ft.Column):
         if not nodes: return
 
         dlg = ft.AlertDialog(
-            title=ft.Text("⚠️ 确认开始清理？"),
-            content=ft.Text(f"系统即将清理 {len(nodes)} 个项，共计 {_fmt_size(self._total_size_bytes)}。\n\n当前为【模拟模式】，不会真正改动磁盘。"),
+            title=ft.Row([ft.Icon(ft.icons.WARNING_AMBER_ROUNDED, color=COLOR_ZEN_DANGER), ft.Text("确认开始物理清理？")]),
+            content=ft.Text(f"系统即将正式处理 {len(nodes)} 个勾选项，共计约 {_fmt_size(self._total_size_bytes)}。\n\n提示：低风险项将被直接删除，中/高风险项将移入回收站。"),
             actions=[
                 ft.TextButton("我再想想", on_click=lambda _: self._close_dlg(dlg), style=ft.ButtonStyle(color=COLOR_ZEN_TEXT_DIM)),
-                ft.ElevatedButton("开始清理", bgcolor=COLOR_ZEN_DANGER, color="white", on_click=lambda _: self._run_clean(dlg, len(nodes))),
+                ft.ElevatedButton("开始清理", bgcolor=COLOR_ZEN_DANGER, color="white", on_click=lambda _: self._trigger_clean(dlg, nodes)),
             ]
         )
         self.app.page.overlay.append(dlg)
@@ -359,30 +380,51 @@ class ResultView(ft.Column):
         dlg.open = False
         self.app.page.update()
 
-    def _run_clean(self, dlg, count):
+    def _trigger_clean(self, dlg, nodes_to_clean):
+        """点击确认清理按钮后，立即更新 UI 并派发异步任务"""
+        # 第一时间必须立即关闭对话框，避免“按下按钮不消失”的视觉僵直
         dlg.open = False
         self.btn_clean.disabled = True
-        self.btn_clean.text = "正在处理中..."
-        self.update()
-
-        self.update()
-
-        # 模拟清理成功
-        # 未来：这里将调用 `from core.cleaner import clean` 并获取 trashed 数量
-        has_trashed = True  # 模拟存在移入回收站的 MEDIUM/HIGH 文件
-
-        self.app.page.snack_bar = ft.SnackBar(
-            ft.Text(f"常规清理完毕！预计释放 {_fmt_size(self._total_size_bytes)} 空间。"), 
-            bgcolor=ft.colors.GREEN_800
-        )
-        self.app.page.snack_bar.open = True
-        self.app.scan_nodes = [] # 清空扫描数据
+        self.btn_clean.text = "正在物理粉碎中..."
+        self.btn_clean.bgcolor = ft.colors.GREY_800
+        self.btn_reset.disabled = True
         self.app.page.update()
+        
+        # 抛出异步清理任务，脱离 UI 线程
+        self.app.page.run_task(self._async_run_clean, nodes_to_clean)
 
-        if has_trashed:
-            self._prompt_empty_recycle_bin()
-        else:
-            self.app.navigate_to("/scan")
+    async def _async_run_clean(self, nodes_to_clean):
+        """在独立线程池中执行耗时的物理清理，避免阻塞主线程动画帧"""
+        import asyncio
+        from core.cleaner import clean
+
+        # 1. 调用核心引擎（在独立线程执行）
+        result = await asyncio.to_thread(clean, nodes_to_clean, force_high=True)
+
+        # 2. 清理完成后，切回主线程更新 UI
+        if self.app.page:
+            # 汇总通知
+            msg = f"清理完毕！物理删除 {result.deleted} 项，移入回收站 {result.trashed} 项。"
+            if result.freed_bytes > 0:
+                msg += f" 已腾出空间 {_fmt_size(result.freed_bytes)}。"
+            
+            self.app.page.snack_bar = ft.SnackBar(
+                ft.Text(msg),
+                bgcolor=ft.colors.GREEN_800 if result.failed == 0 else ft.colors.ORANGE_800,
+                duration=5000
+            )
+            self.app.page.snack_bar.open = True
+            
+            # 数据落盘与重置
+            self.app.scan_nodes = [] # 清空扫描数据
+            
+            # 如果有移入回收站的项，弹出复核窗口
+            if result.trashed > 0:
+                self._prompt_empty_recycle_bin()
+            else:
+                self.app.navigate_to("/scan")
+            
+            self.app.page.update()
 
     def _prompt_empty_recycle_bin(self):
         def _on_confirm(e):

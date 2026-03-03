@@ -2,6 +2,7 @@ import threading
 import flet as ft
 
 from core.migration import get_shell_folders, SHELL_FOLDER_KEYS, _dir_size, restore_folder
+from config.settings import COLOR_ZEN_PRIMARY, COLOR_ZEN_SURFACE, COLOR_ZEN_TEXT_DIM
 
 
 # 注册表键名 → 图标映射
@@ -111,46 +112,69 @@ class MigrationView(ft.Column):
         """构建单个文件夹的迁移卡片。"""
         size_str = _fmt_size(size_bytes)
 
-        # 仅 C 盘目录才高亮提示
-        path_color = ft.colors.ORANGE_400 if on_c else ft.colors.GREY_500
+        # 设置核心数据展示色
+        path_color = "#8B93A6"
+        size_color = "#FFFFFF" if on_c else "#8B93A6"
 
         if on_c:
-            action_btn = ft.ElevatedButton(
-                "迁移至其他盘",
-                bgcolor="#009688",
-                color="white",
+            action_btn = ft.Container(
+                content=ft.Text("迁移至其他盘", color="white", weight=ft.FontWeight.W_600, size=13),
+                padding=ft.padding.symmetric(horizontal=15, vertical=6),
+                border_radius=4,
+                gradient=ft.LinearGradient(
+                    begin=ft.alignment.top_left,
+                    end=ft.alignment.bottom_right,
+                    colors=["#1DD1A1", "#00C2FF"],
+                ),
+                ink=True,
                 on_click=lambda e, k=reg_key, p=path: self._on_migrate(e, k, p),
             )
         else:
             action_btn = ft.OutlinedButton(
                 "还原回 C 盘",
                 icon=ft.icons.UNDO,
+                style=ft.ButtonStyle(
+                    color={"hovered": ft.colors.WHITE, "": "#8B93A6"},
+                    side={"": ft.BorderSide(1, "#26FFFFFF")},
+                    bgcolor={"hovered": "#1AFFFFFF", "": ft.colors.TRANSPARENT},
+                ),
                 on_click=lambda e, k=reg_key: self._on_restore(e, k),
             )
 
+        def _on_hover(e):
+            e.control.bgcolor = "#1E222B" if e.data == "true" else COLOR_ZEN_SURFACE
+            e.control.update()
+
         return ft.Container(
-            content=ft.Row([
-                ft.Icon(icon, color=ft.colors.BLUE_400, size=28),
-                ft.Column(
-                    [
-                        ft.Text(label, weight=ft.FontWeight.BOLD),
-                        ft.Text(
-                            f"{path}  ({size_str})",
-                            size=12,
-                            color=path_color,
-                            no_wrap=True,
-                            overflow=ft.TextOverflow.ELLIPSIS,
-                        ),
-                    ],
-                    expand=True,
-                    spacing=2,
-                ),
-                action_btn,
-            ]),
+            content=ft.Row(
+                [
+                    ft.Icon(icon, color=ft.colors.BLUE_400, size=28),
+                    ft.Column(
+                        [
+                            ft.Text(label, weight=ft.FontWeight.BOLD),
+                            ft.Text(path, size=12, color=path_color, no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS),
+                        ],
+                        expand=True,
+                        spacing=2,
+                    ),
+                    ft.Row(
+                        [
+                            ft.Text(size_str, size=13, color=size_color, font_family="Consolas", weight=ft.FontWeight.BOLD if on_c else ft.FontWeight.NORMAL),
+                            action_btn,
+                        ],
+                        alignment=ft.MainAxisAlignment.END,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        spacing=15,
+                    ),
+                ],
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
             padding=15,
-            bgcolor="#252525",
+            bgcolor=COLOR_ZEN_SURFACE,
+            border=ft.border.all(1, "#0DFFFFFF"),
             border_radius=8,
             margin=ft.margin.only(bottom=10),
+            on_hover=_on_hover,
         )
 
     # ── 迁移触发 ──────────────────────────────────────────────────────────────

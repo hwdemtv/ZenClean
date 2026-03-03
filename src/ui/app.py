@@ -1,9 +1,10 @@
+import os
 import flet as ft
 from typing import Optional
 from datetime import datetime
 
 from config.settings import (
-    COLOR_ZEN_BG, COLOR_ZEN_SIDEBAR, COLOR_ZEN_PRIMARY, 
+    COLOR_ZEN_BG, COLOR_ZEN_SURFACE, COLOR_ZEN_PRIMARY, 
     COLOR_ZEN_GOLD, COLOR_ZEN_DIVIDER, COLOR_ZEN_TEXT_MAIN, COLOR_ZEN_TEXT_DIM
 )
 from ui.views.scan_view import ScanView
@@ -25,11 +26,15 @@ class ZenCleanApp(ft.Column):
         self.lease_expiry_date: Optional[str] = None
         self.total_expiry_date: Optional[str] = None
 
+        _assets_dir = page.client_storage.get("assets_dir") or ""
+        _icon_img_path = os.path.join(_assets_dir, "icon.png") if _assets_dir else "icon.png"
+
+        # ── 自定义沉浸式顶栏 ──────────────────────────────────────────────────
         _drag_content = ft.Container(
             content=ft.Stack([
                 ft.Row([
                     ft.Container(width=5), # 左侧微调
-                    ft.Image(src="icon.png", width=18, height=18),
+                    ft.Image(src=_icon_img_path, width=18, height=18),
                     ft.Text("禅清 (ZenClean)", size=12, color=COLOR_ZEN_TEXT_DIM, weight=ft.FontWeight.W_500),
                 ], spacing=10, alignment=ft.MainAxisAlignment.START),
                 ft.Container(
@@ -51,7 +56,7 @@ class ZenCleanApp(ft.Column):
                 ft.WindowDragArea(content=_drag_content, expand=True),
                 _window_controls,
             ]),
-            bgcolor=COLOR_ZEN_SIDEBAR, # 保持与侧边栏一致的曜石灰
+            bgcolor=COLOR_ZEN_SURFACE, # 挂入卡片层色值
             height=45,
             visible=False 
         )
@@ -65,9 +70,10 @@ class ZenCleanApp(ft.Column):
             label_type=ft.NavigationRailLabelType.ALL,
             min_width=80,
             min_extended_width=200,
-            bgcolor=COLOR_ZEN_SIDEBAR,
+            bgcolor=COLOR_ZEN_SURFACE,
+            indicator_color=ft.colors.TRANSPARENT, # 去除整块背景高亮
             unselected_label_text_style=ft.TextStyle(color=COLOR_ZEN_TEXT_DIM, size=12),
-            selected_label_text_style=ft.TextStyle(color=COLOR_ZEN_PRIMARY, size=12, weight=ft.FontWeight.BOLD),
+            selected_label_text_style=ft.TextStyle(color=COLOR_ZEN_TEXT_MAIN, size=12, weight=ft.FontWeight.BOLD), # 选中文本泛白
             group_alignment=-0.9, # 让图标整体靠上方一点
             destinations=[
                 ft.NavigationRailDestination(
@@ -125,9 +131,9 @@ class ZenCleanApp(ft.Column):
         # 共享数据层
         self.scan_nodes: list[dict] = []
         
-        # 启动时进行离线免联鉴权（如果本地缓存合法 Token 则静默激活此设备）
+        # 启动时进行离线免联鉴权（启动阶段跳过网络对时，极致加速）
         from core.auth import check_local_auth_status
-        is_val, payload = check_local_auth_status()
+        is_val, payload = check_local_auth_status(is_startup=True)
         if is_val and payload:
             exp_ts = payload.get("exp")
             self.is_activated = True
@@ -142,6 +148,68 @@ class ZenCleanApp(ft.Column):
             else:
                 self.total_expiry_date = self.lease_expiry_date
 
+            # ---- 新增：如果缓存了 license_key，发起异步的后台权限效验以同步后端解绑状态 ----
+            license_key = payload.get("_local_license_key")
+            if license_key:
+                import threading
+                def _bg_verify():
+                    import time
+                    from core.auth import verify_license_online
+                    from core.logger import logger
+                    from config.settings import AUTH_DAT_PATH
+
+                    # 初始稍微延后，避免阻塞启动流程
+                    time.sleep(2)
+
+                    while True:
+                        # 如果已经被其他机制降级（例如在前台点退出、或者上一次轮询已经降级），直接退出探测循环
+                        if not self.is_activated:
+                            break
+
+                        # 传入 is_auto_check=True，防止服务端对于已解绑的激活码执行误判自动重新绑定
+                        success, msg = verify_license_online(license_key, is_auto_check=True)
+                        logger.info(f"[BG_VERIFY] result: success={success}, msg={msg}")
+                        
+                        if not success and ("[REVOKED]" in msg or ("网络" not in msg and "服务端异常" not in msg)):
+                            # 以下的所有 UI 操作必须在主循环或其协程中安全执行，否则会引发线程死锁
+                            async def update_ui_safe():
+                                logger.warning(f"[BG_VERIFY] license revoked! Executing downgrade.")
+                                # 主动清除本地验证状态，降级为非 VIP
+                                if AUTH_DAT_PATH.exists():
+                                    try:
+                                        AUTH_DAT_PATH.unlink()
+                                        logger.info("[BG_VERIFY] Local auth cache removed.")
+                                    except Exception as e:
+                                        logger.error(f"[BG_VERIFY] Failed to remove auth cache: {e}")
+                                        pass
+                                
+                                self.set_activated(False)
+
+                                # 获取明确的拦截原因
+                                alert_msg = "您的授权已失效或在其他设备被解绑，当前已恢复为免费版。"
+                                if "[REVOKED]" in msg:
+                                    alert_msg = msg.replace("[REVOKED]", "").strip()
+
+                                # 弹窗提示用户授权已失效
+                                self.page.snack_bar = ft.SnackBar(
+                                    ft.Text(alert_msg),
+                                    bgcolor=ft.colors.RED_800,
+                                )
+                                self.page.snack_bar.open = True
+                                self.page.update()
+
+                            # 送入 Flet 主 UI 线程的安全更新队列
+                            self.page.run_task(update_ui_safe)
+                            
+                            # 已经完成降级，停止循环探测
+                            break
+                            
+                        # 没问题的话，睡半小时再检查兜底
+                        time.sleep(1800)
+
+                threading.Thread(target=_bg_verify, daemon=True).start()
+
+
     def set_activated(self, is_activated: bool, lease_expiry: Optional[str] = None, total_expiry: Optional[str] = None):
         """全局设置激活状态及到期时间并刷新 UI"""
         self.is_activated = is_activated
@@ -151,6 +219,13 @@ class ZenCleanApp(ft.Column):
         self._nav_rail.destinations[2].selected_icon = ft.icons.VERIFIED_USER if is_activated else ft.icons.LOCAL_POLICE
         self._nav_rail.destinations[2].icon = ft.icons.VERIFIED_USER if is_activated else ft.icons.LOCAL_POLICE_OUTLINED
         self.page.update()
+        
+        # 强制刷新当前可能受到影响的视图
+        current_idx = self._nav_rail.selected_index
+        if current_idx == 2:
+            self.navigate_to("/auth")
+        elif current_idx == 0:
+            self.navigate_to("/scan")
 
     # ── 导航 ──────────────────────────────────────────────────────────────────
 
@@ -182,11 +257,11 @@ class ZenCleanApp(ft.Column):
             view.start()
 
     def _window_minimize(self, e):
-        self.page.window.state = ft.WindowState.MINIMIZED
+        self.page.window.minimized = True
         self.page.update()
 
     def _window_maximize(self, e):
-        self.page.window.state = ft.WindowState.NORMAL if self.page.window.state == ft.WindowState.MAXIMIZED else ft.WindowState.MAXIMIZED
+        self.page.window.maximized = not getattr(self.page.window, "maximized", False)
         self.page.update()
 
     def _window_close(self, e):

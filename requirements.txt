@@ -5,3 +5,4 @@ pydantic
 requests
 PyJWT
 py-machineid
+python-dotenv

@@ -6,6 +6,14 @@ import os
 import sys
 from pathlib import Path
 
+try:
+    from dotenv import load_dotenv
+    # 根据运行时位置，智能寻找工程根目录的 .env
+    _root = Path(__file__).parent.parent.parent
+    load_dotenv(dotenv_path=_root / ".env")
+except ImportError:
+    pass
+
 def _get_downloads_folder() -> str:
     """获取 Windows 系统真实的下载文件夹路径（支持用户修改默认位置）"""
     if sys.platform != "win32":
@@ -22,9 +30,9 @@ def _get_downloads_folder() -> str:
 
 
 # ── 版本 ──────────────────────────────────────────────────────────────────────
-APP_NAME = "ZenClean"
-APP_VERSION = "0.1.0"          # MVP 首发版
-APP_DISPLAY_NAME = "禅清 (ZenClean)"
+from .version import __version__ as APP_VERSION
+from .version import __app_name__ as APP_NAME
+from .version import __display_name__ as APP_DISPLAY_NAME
 
 # ── 路径 ──────────────────────────────────────────────────────────────────────
 # 用户数据根目录：%AppData%\ZenClean
@@ -107,25 +115,26 @@ LOG_LEVEL = "INFO"             # 可通过设置页切换为 DEBUG
 LOG_RETENTION_DAYS = 7         # 保留最近 N 天的日志文件
 
 # ── 鉴权 ──────────────────────────────────────────────────────────────────────
-# 服务端节点列表（带有高可用与降级 Fallback 优先级的配置，首个即可连通则不尝试后续）
-LICENSE_SERVER_URLS = [
-    "https://km.hwdemtv.com",
-    "https://kami.hwdemtv.com",
-    "https://hw-license-center.hwdemtv.workers.dev"
-]
-LICENSE_PRODUCT_ID = "zenclean"                  # 在 hw-license-center 后台注册的产品ID
-# 第一阶段公测万能码（默认 fallback，或留空交由用户输入）
-BETA_PUBLIC_KEY = ""
-# JWT 离线有效期（秒）：服务端默认签 30 天，本地宽容 24 h 后台静默重验
+# 服务端节点列表（优先读取环境变量，以逗号分隔。开源/发布时隐藏真实节点）
+_env_urls = os.environ.get("LICENSE_SERVER_URLS", "")
+if _env_urls:
+    LICENSE_SERVER_URLS = [u.strip() for u in _env_urls.split(",") if u.strip()]
+else:
+    LICENSE_SERVER_URLS = ["https://your-license-server.com"]
+
+LICENSE_PRODUCT_ID = os.environ.get("LICENSE_PRODUCT_ID", "zenclean") # 产品ID
+# 第一阶段公测万能码
+BETA_PUBLIC_KEY = os.environ.get("BETA_PUBLIC_KEY", "")
+# JWT 离线有效期（秒）
 JWT_OFFLINE_TTL = 86400        # 24 小时
-# NTP 时间偏差容忍上限（秒），超过则禁用离线 JWT 校验
+# NTP 时间偏差容忍上限（秒）
 NTP_MAX_DRIFT_SECONDS = 300
 # 联网请求超时（秒）
 LICENSE_REQUEST_TIMEOUT = 8
 
 # ── AI 云端代理网关 ────────────────────────────────────────────────────────────
-# 后端网关基地址（hw-license-center 部署的 AI 代理路由）
-AI_GATEWAY_BASE_URL = "https://km.hwdemtv.com/api/v1/ai"
+# 后端网关基地址（通过环境变量载入）
+AI_GATEWAY_BASE_URL = os.environ.get("AI_GATEWAY_BASE_URL", "https://your-license-server.com/api/v1/ai")
 # SSE 流式分析端点（POST，携带 JWT Authorization）
 AI_ANALYZE_URL = f"{AI_GATEWAY_BASE_URL}/chat/completions"
 # 额度查询端点（GET，携带 JWT Authorization）
@@ -136,15 +145,16 @@ AI_REQUEST_TIMEOUT = 8
 AI_CLIENT_RATE_LIMIT = 10
 AI_CLIENT_RATE_WINDOW = 60  # 秒
 
-# ── UI 主题 (温润禅意方案) ────────────────────────────────────────────────────────
-COLOR_ZEN_BG = "#1A1A1A"      # 曜石灰 - 主背景
-COLOR_ZEN_SIDEBAR = "#212121" # 曜石灰(浅) - 侧边栏
-COLOR_ZEN_PRIMARY = "#009688" # 水墨青/玉石绿 - 沉稳内敛的核心色
-COLOR_ZEN_GOLD = "#D4AF37"    # 檀木金 - VIP/尊贵/品牌
-COLOR_ZEN_DANGER = "#E74C3C"  # 朱砂红 - 警告/删除/退出
-COLOR_ZEN_DIVIDER = "#333333" # 内敛灰 - 分割线/装饰
-COLOR_ZEN_TEXT_MAIN = "#E0E0E0" # 灰白 - 主文字
-COLOR_ZEN_TEXT_DIM = "#9E9E9E"  # 浅灰 - 副文字
+# ── UI 主题 (商业级 SaaS 方案) ──────────────────────────────────────────────────
+COLOR_ZEN_BG = "#0F1115"          # 极光暗蓝 - 主背景
+COLOR_ZEN_SURFACE = "#171A21"     # 卡片层 - 用于区块划分
+COLOR_ZEN_PRIMARY = "#009688"     # 水墨青/玉石绿 - 沉稳内敛的核心色
+COLOR_ZEN_GOLD = "#D4AF37"        # 檀木金 - VIP/尊贵/品牌
+COLOR_ZEN_DANGER = "#E74C3C"      # 朱砂红 - 警告/删除/退出
+COLOR_ZEN_DIVIDER = "#11FFFFFF"   # 极低透明度白 - 无痕分割线
+COLOR_ZEN_TEXT_MAIN = "#E6EAF0"   # 星尘白 - 主标题文字
+COLOR_ZEN_TEXT_DIM = "#8B93A6"    # 冷峻灰 - 副标题文字
+COLOR_ZEN_WARNING = "#FFB020"     # 橙黄 - 配额提示/警告
 
 # 兼容旧代码引用 (渐进式替换)
 THEME_BG_COLOR = COLOR_ZEN_BG
