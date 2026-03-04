@@ -2,7 +2,7 @@ import threading
 import flet as ft
 
 from core.migration import get_shell_folders, SHELL_FOLDER_KEYS, _dir_size, restore_folder
-from config.settings import COLOR_ZEN_PRIMARY, COLOR_ZEN_SURFACE, COLOR_ZEN_TEXT_DIM
+from config.settings import COLOR_ZEN_PRIMARY, COLOR_ZEN_SURFACE
 
 
 # 注册表键名 → 图标映射

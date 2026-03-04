@@ -1,9 +1,8 @@
 import os
 import flet as ft
-import re
 from datetime import datetime
 from config.settings import (
-    COLOR_ZEN_PRIMARY, COLOR_ZEN_BG, COLOR_ZEN_GOLD, 
+    COLOR_ZEN_PRIMARY, COLOR_ZEN_GOLD, 
     COLOR_ZEN_TEXT_MAIN, COLOR_ZEN_TEXT_DIM
 )
 from config.version import __version__ as APP_VERSION
@@ -99,74 +98,72 @@ class AuthView(ft.Column):
                 except Exception:
                     pass
 
-            content_col = ft.Column([
-                ft.Container(
-                    content=ft.Column([
-                        ft.Container(
-                            content=ft.Image(
-                                src=os.path.join(self.app.page.client_storage.get("assets_dir") or "", "icon.png"), 
-                                width=80, height=80, fit=ft.ImageFit.CONTAIN
-                            ),
-                            width=110, height=110,
-                            border_radius=55,
-                            bgcolor="#2A2F3A",  # 微亮底座，让黑色六边形浮出
-                            alignment=ft.alignment.center,
-                            margin=ft.margin.only(bottom=10),
+            content_col = ft.Container(
+                content=ft.Column([
+                    ft.Container(
+                        content=ft.Image(
+                            src=os.path.join(self.app.page.client_storage.get("assets_dir") or "", "icon.png"), 
+                            width=80, height=80, fit=ft.ImageFit.CONTAIN
                         ),
-                        ft.Text("尊贵的 VIP 状态已激活", size=24, weight=ft.FontWeight.BOLD, color=COLOR_ZEN_GOLD),
-                        
-                        ft.Container(
-                            content=ft.Column(expiry_infos, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=5),
-                            padding=15,
-                        ),
+                        width=110, height=110,
+                        border_radius=55,
+                        bgcolor="#2A2F3A",
+                        alignment=ft.alignment.center,
+                        margin=ft.margin.only(bottom=10),
+                    ),
+                    ft.Text("尊贵的 VIP 状态已激活", size=24, weight=ft.FontWeight.BOLD, color=COLOR_ZEN_GOLD),
+                    
+                    ft.Container(
+                        content=ft.Column(expiry_infos, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=5, tight=True),
+                        padding=15,
+                    ),
 
-                        ft.Text("您已解锁全天候本地 AI 深层扫查与强力清除功能。", color=COLOR_ZEN_TEXT_DIM),
-                        
-                        # AI 额度展示区
-                        ft.Container(
-                            content=ft.Row([
-                                ft.Icon(ft.icons.BOLT, color=COLOR_ZEN_PRIMARY, size=20),
-                                self._quota_text,
-                            ], alignment=ft.MainAxisAlignment.CENTER),
-                            margin=ft.margin.only(top=10, bottom=10),
-                        ),
+                    ft.Text("您已解锁全天候本地 AI 深层扫查与强力清除功能。", color=COLOR_ZEN_TEXT_DIM),
+                    
+                    ft.Container(
+                        content=ft.Row([
+                            ft.Icon(ft.icons.BOLT, color=COLOR_ZEN_PRIMARY, size=20),
+                            self._quota_text,
+                        ], alignment=ft.MainAxisAlignment.CENTER),
+                        margin=ft.margin.only(top=10, bottom=10),
+                    ),
 
-                        ft.Container(height=10),
-                        ft.Container(
-                            content=ft.Text("开始体验纯净系统", color="white", weight=ft.FontWeight.BOLD, size=16),
-                            alignment=ft.alignment.center,
-                            width=300,
-                            height=45,
-                            border_radius=25,
-                            gradient=ft.LinearGradient(
-                                begin=ft.alignment.top_left,
-                                end=ft.alignment.bottom_right,
-                                colors=["#1DD1A1", "#00C2FF"],
-                            ),
-                            shadow=ft.BoxShadow(spread_radius=1, blur_radius=15, color="#401DD1A1"),
-                            ink=True,
-                            on_click=lambda _: self.app.navigate_to("/scan")
+                    ft.Container(height=10),
+                    ft.Container(
+                        content=ft.Text("开始体验纯净系统", color="white", weight=ft.FontWeight.BOLD, size=16),
+                        alignment=ft.alignment.center,
+                        width=300,
+                        height=45,
+                        border_radius=25,
+                        gradient=ft.LinearGradient(
+                            begin=ft.alignment.top_left,
+                            end=ft.alignment.bottom_right,
+                            colors=["#1DD1A1", "#00C2FF"],
                         ),
-                        ft.Text(f"当前版本: v{APP_VERSION} Beta", size=14, color=COLOR_ZEN_TEXT_DIM),
-                        ft.Container(height=10),
-                        ft.ElevatedButton(
-                            text="检查更新",
-                            icon=ft.icons.SYSTEM_UPDATE_ALT,
-                            on_click=self._on_check_update_click,
-                            style=ft.ButtonStyle(
-                                color=COLOR_ZEN_GOLD,
-                                bgcolor=ft.colors.TRANSPARENT,
-                                side=ft.BorderSide(1, COLOR_ZEN_GOLD),
-                                shape=ft.RoundedRectangleBorder(radius=8),
-                            )
+                        shadow=ft.BoxShadow(spread_radius=1, blur_radius=15, color="#401DD1A1"),
+                        ink=True,
+                        on_click=lambda _: self.app.navigate_to("/scan")
+                    ),
+                    ft.Text(f"当前版本: v{APP_VERSION} Beta", size=14, color=COLOR_ZEN_TEXT_DIM),
+                    ft.Container(height=10),
+                    ft.ElevatedButton(
+                        text="检查更新",
+                        icon=ft.icons.SYSTEM_UPDATE_ALT,
+                        on_click=self._on_check_update_click,
+                        style=ft.ButtonStyle(
+                            color=COLOR_ZEN_GOLD,
+                            bgcolor=ft.colors.TRANSPARENT,
+                            side=ft.BorderSide(1, COLOR_ZEN_GOLD),
+                            shape=ft.RoundedRectangleBorder(radius=8),
                         )
-                    ], spacing=5, alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                    padding=40,
-                    border=ft.border.all(1, COLOR_ZEN_GOLD),
-                    border_radius=10,
-                    bgcolor="#252525"
-                )
-            ], alignment=ft.MainAxisAlignment.CENTER)
+                    )
+                ], spacing=5, alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, tight=True),
+                padding=40,
+                width=600,
+                border=ft.border.all(1, COLOR_ZEN_GOLD),
+                border_radius=10,
+                bgcolor="#252525"
+            )
         else:
             content_col = ft.Column([
                 self._code_input,
@@ -181,12 +178,16 @@ class AuthView(ft.Column):
                 ft.Column([
                     ft.Text("激活 ZenClean VIP 特权", size=24, weight=ft.FontWeight.BOLD, color=COLOR_ZEN_TEXT_MAIN),
                     ft.Text("输入激活码以解锁本地 AI 高级扫描与一键清除能力。", color=COLOR_ZEN_TEXT_DIM),
-                ]),
-                ft.Container(height=50),
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER if self.app.is_activated else ft.CrossAxisAlignment.START),
+                ft.Container(height=15),
                 content_col,
+                ft.Container(height=15),
             ],
             expand=True,
+            scroll=ft.ScrollMode.AUTO,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER if self.app.is_activated else ft.CrossAxisAlignment.START
         )
+
 
     def _show_license(self, e):
         """显示软件许可协议简要版"""
@@ -297,6 +298,15 @@ class AuthView(ft.Column):
             self._error_text.visible = True
             
         self.update()
+
+    def _on_check_update_click(self, e):
+        """点击检查更新：此处暂时作为弹窗占位，避免出现未绑定方法的 AttributeError"""
+        self.page.snack_bar = ft.SnackBar(
+            ft.Text("自动检查更新功能将在阶段二正式开放，敬请期待！"),
+            bgcolor=COLOR_ZEN_PRIMARY
+        )
+        self.page.snack_bar.open = True
+        self.page.update()
 
     def did_mount(self):
         """视图挂载后异步加载 AI 额度"""

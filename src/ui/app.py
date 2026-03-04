@@ -4,7 +4,7 @@ from typing import Optional
 from datetime import datetime
 
 from config.settings import (
-    COLOR_ZEN_BG, COLOR_ZEN_SURFACE, COLOR_ZEN_PRIMARY, 
+    COLOR_ZEN_BG, COLOR_ZEN_SURFACE, 
     COLOR_ZEN_GOLD, COLOR_ZEN_DIVIDER, COLOR_ZEN_TEXT_MAIN, COLOR_ZEN_TEXT_DIM
 )
 from ui.views.scan_view import ScanView
@@ -12,7 +12,6 @@ from ui.views.migration_view import MigrationView
 from ui.views.auth_view import AuthView
 from ui.views.result_view import ResultView
 from ui.views.splash import SplashView
-from core.updater import check_for_updates
 
 class ZenCleanApp(ft.Column):
     """
@@ -37,9 +36,13 @@ class ZenCleanApp(ft.Column):
                     ft.Image(src=_icon_img_path, width=18, height=18),
                     ft.Text("禅清 (ZenClean)", size=12, color=COLOR_ZEN_TEXT_DIM, weight=ft.FontWeight.W_500),
                 ], spacing=10, alignment=ft.MainAxisAlignment.START),
+                # 为确保大字标题处于下方 PageContainer 的绝对视觉中心，
+                # 使用绝对展开并补全由于右侧窗体控制按钮和左侧 NavRail 引起的中轴线数学偏差。
                 ft.Container(
                     content=ft.Text("互为螺旋 - C盘AI极速清理大师", size=13, color=COLOR_ZEN_GOLD, weight=ft.FontWeight.BOLD),
                     alignment=ft.alignment.center,
+                    left=0, right=0, top=0, bottom=0,
+                    padding=ft.padding.only(left=205),
                 ),
             ], expand=True),
             padding=ft.padding.only(left=15, top=8, bottom=8, right=10),

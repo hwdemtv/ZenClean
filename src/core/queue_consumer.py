@@ -37,12 +37,10 @@ ZenClean Queue 消费线程
     worker.start()
 """
 
-import queue
 import threading
 from typing import Callable
 
 from config.settings import QUEUE_POLL_INTERVAL
-from core.logger import logger
 
 
 class QueueConsumer(threading.Thread):

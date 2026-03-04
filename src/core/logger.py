@@ -1,5 +1,4 @@
 import logging
-import os
 import warnings
 from logging.handlers import TimedRotatingFileHandler
 from config.settings import APP_DATA_DIR

@@ -29,11 +29,6 @@ def _get_downloads_folder() -> str:
     return os.path.join(os.path.expandvars("%USERPROFILE%"), "Downloads")
 
 
-# ── 版本 ──────────────────────────────────────────────────────────────────────
-from .version import __version__ as APP_VERSION
-from .version import __app_name__ as APP_NAME
-from .version import __display_name__ as APP_DISPLAY_NAME
-
 # ── 路径 ──────────────────────────────────────────────────────────────────────
 # 用户数据根目录：%AppData%\ZenClean
 APP_DATA_DIR = Path(os.environ.get("APPDATA", "~")) / "ZenClean"

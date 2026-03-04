@@ -26,10 +26,7 @@ Queue 消息格式：
 
 import multiprocessing
 import os
-import stat
-import time
 from pathlib import Path
-from typing import Callable
 
 from config.settings import SCAN_BATCH_SIZE, SCAN_TARGETS
 from core import whitelist

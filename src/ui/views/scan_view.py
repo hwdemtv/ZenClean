@@ -1,5 +1,3 @@
-import multiprocessing
-import threading
 import shutil
 import flet as ft
 

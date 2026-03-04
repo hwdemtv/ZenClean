@@ -1,9 +1,11 @@
 import flet as ft
 from collections import defaultdict
 from config.settings import (
-    COLOR_ZEN_PRIMARY, COLOR_ZEN_BG, COLOR_ZEN_GOLD, 
+    COLOR_ZEN_PRIMARY, COLOR_ZEN_GOLD, 
     COLOR_ZEN_DANGER, COLOR_ZEN_TEXT_MAIN, COLOR_ZEN_TEXT_DIM, COLOR_ZEN_DIVIDER
 )
+from ui.components.file_list_item import FileListItem
+from ui.components.dialogs import show_confirm_clean_dialog, show_empty_recycle_bin_dialog
 
 # 分类ID → 中文标签 + 图标
 _CATEGORY_META: dict[str, tuple[str, str]] = {
@@ -200,41 +202,13 @@ class ResultView(ft.Column):
                         border_radius=5,
                     ))
 
-                risk_color = ft.colors.GREEN_400
-                if node["risk_level"] == "MEDIUM": risk_color = ft.colors.YELLOW_400
-                elif node["risk_level"] == "HIGH": risk_color = ft.colors.RED_400
-
                 # 行内复选框同步
-                def _on_row_check(e, n=node):
-                    n["is_checked"] = e.control.value
+                def _on_row_check(e, current_node):
+                    current_node["is_checked"] = e.control.value
                     self._update_ui_stats()
 
-                def _open_location(e, n=node):
-                    import os
-                    target_dir = os.path.dirname(n["path"])
-                    if os.path.exists(target_dir):
-                        os.startfile(target_dir)
-
-                file_controls.append(
-                    ft.Container(
-                        content=ft.Row([
-                            ft.Checkbox(value=node["is_checked"], on_change=_on_row_check),
-                            ft.Icon(ft.icons.CIRCLE, color=risk_color, size=10),
-                            ft.Text(node["path"][-70:] if len(node["path"]) > 75 else node["path"],
-                                    size=12, expand=True, font_family="Consolas"),
-                            ft.Text(_fmt_size(node.get("size_bytes", 0)), size=12, color=ft.colors.GREY_500),
-                            ft.IconButton(
-                                icon=ft.icons.FOLDER_OPEN_ROUNDED,
-                                icon_size=16,
-                                icon_color=COLOR_ZEN_PRIMARY,
-                                tooltip="打开文件所在目录 (手动清理)",
-                                on_click=_open_location
-                            ),
-                        ], spacing=5),
-                        padding=ft.padding.only(left=10, right=5),
-                        tooltip=node["ai_advice"],
-                    )
-                )
+                size_str = _fmt_size(node.get("size_bytes", 0))
+                file_controls.append(FileListItem(node, _on_row_check, size_str))
 
             # ── 底部操作栏（合并“加载更多”与“收起”为一行） ──────────────
             remaining = total_in_cat - show_limit
@@ -364,26 +338,14 @@ class ResultView(ft.Column):
         nodes = [n for n in self.app.scan_nodes if n.get("is_checked", False)]
         if not nodes: return
 
-        dlg = ft.AlertDialog(
-            title=ft.Row([ft.Icon(ft.icons.WARNING_AMBER_ROUNDED, color=COLOR_ZEN_DANGER), ft.Text("确认开始物理清理？")]),
-            content=ft.Text(f"系统即将正式处理 {len(nodes)} 个勾选项，共计约 {_fmt_size(self._total_size_bytes)}。\n\n提示：低风险项将被直接删除，中/高风险项将移入回收站。"),
-            actions=[
-                ft.TextButton("我再想想", on_click=lambda _: self._close_dlg(dlg), style=ft.ButtonStyle(color=COLOR_ZEN_TEXT_DIM)),
-                ft.ElevatedButton("开始清理", bgcolor=COLOR_ZEN_DANGER, color="white", on_click=lambda _: self._trigger_clean(dlg, nodes)),
-            ]
-        )
-        self.app.page.overlay.append(dlg)
-        dlg.open = True
-        self.app.page.update()
+        size_str = _fmt_size(self._total_size_bytes)
+        def _on_confirm():
+            self._trigger_clean(nodes)
+            
+        show_confirm_clean_dialog(self.app.page, size_str, len(nodes), _on_confirm)
 
-    def _close_dlg(self, dlg):
-        dlg.open = False
-        self.app.page.update()
-
-    def _trigger_clean(self, dlg, nodes_to_clean):
+    def _trigger_clean(self, nodes_to_clean):
         """点击确认清理按钮后，立即更新 UI 并派发异步任务"""
-        # 第一时间必须立即关闭对话框，避免“按下按钮不消失”的视觉僵直
-        dlg.open = False
         self.btn_clean.disabled = True
         self.btn_clean.text = "正在物理粉碎中..."
         self.btn_clean.bgcolor = ft.colors.GREY_800
@@ -427,10 +389,7 @@ class ResultView(ft.Column):
             self.app.page.update()
 
     def _prompt_empty_recycle_bin(self):
-        def _on_confirm(e):
-            dlg.open = False
-            self.app.page.update()
-            
+        def _on_confirm():
             from core.cleaner import empty_recycle_bin
             success = empty_recycle_bin()
             
@@ -439,27 +398,14 @@ class ResultView(ft.Column):
             
             self.app.page.snack_bar = ft.SnackBar(ft.Text(msg), bgcolor=color)
             self.app.page.snack_bar.open = True
-            
             self.app.navigate_to("/scan")
 
-        def _on_cancel(e):
-            dlg.open = False
-            self.app.page.update()
+        def _on_cancel():
             self.app.navigate_to("/scan")
 
-        dlg = ft.AlertDialog(
-            modal=True,
-            title=ft.Row([ft.Icon(ft.icons.WARNING_AMBER_ROUNDED, color=COLOR_ZEN_DANGER), ft.Text("高能预警：清空回收站")]),
-            content=ft.Text("部分争议文件（MEDIUM/HIGH级别）已移入系统回收站作为您的最后防线。\n\n是否立即【彻底清空系统回收站】斩草除根？\n警告：此操作不可逆转！"),
-            actions=[
-                ft.TextButton("先保留在回收站", on_click=_on_cancel, style=ft.ButtonStyle(color=COLOR_ZEN_TEXT_DIM)),
-                ft.ElevatedButton("彻底清空 (免责)", bgcolor=COLOR_ZEN_DANGER, color="white", on_click=_on_confirm),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
-        )
-        self.app.page.overlay.append(dlg)
-        dlg.open = True
-        self.app.page.update()
+        show_empty_recycle_bin_dialog(self.app.page, _on_confirm, _on_cancel)
+
+    # (保留最后的空白便于以后修改)
 
     # (保留最后的空白便于以后修改)
 
