@@ -1,75 +1,66 @@
 # ZenClean (禅清)
 
-现代 Windows C 盘深度清理与优化工具。
+![ZenClean Hero](docs/images/hero.png)
+
+现代 Windows C 盘深度清理与极致优化工具 —— 让您的系统回归“禅”意般的纯净。
+
+[![Status](https://img.shields.io/badge/Status-v0.1.0--Beta-00C2FF?style=flat-square)](https://github.com/hwdemtv/ZenClean)
+[![Python](https://img.shields.io/badge/Python-3.11+-1DD1A1?style=flat-square)](https://www.python.org/)
+[![UI](https://img.shields.io/badge/UI-Flet-white?style=flat-square)](https://flet.dev/)
 
 ## ✨ 核心功能 (Core Features)
 
-- 🧼 **AI 深度清理**: 智能识别系统冗余缓存、流氓软件残留与无效日志，不再担忧误删系统文件。
-- 📦 **开发环境专清**: 自动精准定位并清理 npm/pip/VSCode 等开发工具链留下的巨量隐藏 `.cache` 缓存。
-- 🚀 **智能空间搬家**: 自动扫描并识别空间大户，一键将其无损迁移至 D 盘并生成硬软连接。
-- ⚡ **极致启动体验**: 借助 PyInstaller 原生 Splash 以及 Python 离线网络优化，实现毫秒级应用唤醒。
-    - 🛡️ **安全第一架构**: 含 UAC 全自动提权、回收站全量容灾机制和 Windows 内核级路径免杀白名单。
-    - 🌐 **离线鉴权支持**: 一次联机激活 VIP 授权，即支持全内网离线脱机使用，满足重度极客玩家。
-    
-    ## 💡 我们与传统管家的核心分歧 (Why ZenClean?)
-    
-    如果您习惯了传统清理软件动辄扫出数十 GB 垃圾的“数字震撼”，您可能觉得 ZenClean 过于保守。这并非缺陷，而是我们建立在**性能优先与零感知干扰**之上的核心理念：
-    
-    1. **克制的浏览器专清**：我们**拒绝清理** `Cookies`、`History` 和 `Local Storage`。清理后导致您需要重新登录所有网站、或者丢掉尚未提交的网页表单，不叫清理，叫灾难。ZenClean 像外科手术一样只剔除 `Cache` 和 `Code Cache`。
-    2. **不碰底层预编译缓存**：您不会在这里看到数百 MB 的 `.NET Framework` 或系统组件装配体缓存被标为垃圾。删掉它们确实能换来数字上的快感，但代价是下次打开 Visual Studio 或 AutoCAD 时，系统需要耗费 CPU 算力重新编译一次。
-    3. **拒绝地毯式扫描**：为了实现秒级响应，ZenClean 依靠精确的“垃圾热区”靶向打击（`SCAN_TARGETS`），而不是深度遍历系统盘的每一个盲区。配合源头白名单（`whitelist.py`），我们在根源上阻断了系统级损坏的发生。
-    
-    *不要为了追求清理数字的快感，而牺牲掉系统原本的高效与稳定。*
+- 🧼 **AI 智能深度清理**: 接入真实云端 AI 引擎，精准识别系统冗余、应用残留与无效日志，杜绝误报误删。
+- 📦 **开发环境专项优化**: 针对极客用户，一键扫描 npm/pip/VSCode 等开发链下的巨量隐藏 `.cache` 缓存。
+- � **无损空间搬家**: 核心文件夹（桌面/下载/文档等）自动重定向，支持三方应用数据基于 Junction Link 的物理迁移。
+- 🛡️ **安全第一架构**: UAC 全自动提权、回收站全量容灾、Windows 内核级路径免杀白名单三重保障。
+
+## 💡 为什么选择 ZenClean? (Philosophy)
+
+如果您习惯了传统清理软件动辄扫出数十 GB 垃圾的“数字震撼”，您可能觉得 ZenClean 过于保守。这并非缺陷，而是我们建立在**性能优先与零感知干扰**之上的核心理念：
+
+1. **克制的解析策略**：我们不清理 `Cookies`、`History` 等敏感数据。清理不应导致重新登录或丢失表单。
+2. **不碰底层预编译缓存**：避免删除 `.NET` 或系统组件缓存，防止下次打开专业软件时产生额外的冷启动耗时。
+3. **拒绝地毯式扫描**：依靠精确的“垃圾热区”靶向打击（`SCAN_TARGETS`），实现秒级体检响应。
 
 ## 🛠️ 近期优化成果 (Recent Improvements)
 
-- 🏗️ **底层组件化重构**: 抽取 `FileListItem` 与 `dialogs` 组件，扫描结果页代码精简 60%，渲染性能大幅提升。
-- 📐 **视觉对齐大修**: 彻底修复了全屏幕视野下的跨组件文字中轴线对齐偏差，优化了 VIP 激活中心的视觉平衡感。
-- 📜 **交互体验打磨**: 修正了在高 Dpi 缩放下的卡片切边问题，全局启用智能滚动模式防止内容溢出。
-
-## 项目状态
-当前处于 **v0.1.0 Beta**（封测阶段）。
-
-## 文档指引
-- 📖 [用户安装与运行指南 (含依赖修复)](docs/INSTALL.md)
-- 🛠️ [开发者全量打包指南 (Pyinstaller)](docs/BUILD.md)
-- ⚖️ [项目安全机制分析 (UAC提权与白名单机制)](docs/RISK_ANALYSIS.md)
-- 🚀 [已知问题列表与后续开发路线图 (Known Issues / Roadmap)](docs/ROADMAP.md)
-- 🧠 [AI 额度消耗机制说明](docs/AI_QUOTA_MECHANISM.md)
-- 📓 [项目隐私协议](docs/PRIVACY_POLICY.md)
-
-## 🚀 极速上手 (内测版用户流程)
-
-如果您是首批参与内测的极客用户，请遵循以下流程：
-
-1.  **下载**：获取 `ZenClean_0.1.0_Beta.zip` 压缩包。
-2.  **解压**：将压缩包解压到您电脑的任意位置（建议：`C:\Tools\ZenClean`）。
-3.  **启动**：进入文件夹，双击 **`start.bat`** (推荐) 或直接运行 `ZenClean.exe`。
-4.  **环境补全**：若您的系统缺少必要的运行库，程序会弹窗引导您一键下载安装。
-5.  **开始清理**：享受 AI 带来的极速 C 盘腾挪体验。
+- 🏗️ **底层组件化重构**: 成功抽取 `FileListItem` 与全局 `Dialog` 体系，渲染性能提升 60%+。
+- 📐 **视觉对齐大修**: 精确对齐跨容器 UI 标题中轴线，彻底解决高 Dpi 缩放下的不对齐“强迫症”。
+- � **代码洁净度治理**: 利用 `flake8` 完成了全局无用包引用 (Unused Imports) 的“零容忍”清理。
 
 ---
 
-## 🏗️ 开发者指南 (源码安装)
+## 🏗️ 技术架构 (Tech Stack)
 
-1. 安装依赖:
+- **UI Framework**: [Flet](https://flet.dev/) (基于 Flutter 实现的 Python 声明式 UI 框架)
+- **AI Engine**: 集成智谱 GLM-4 真实云端分析，支持智能风险研判。
+- **IPC Engine**: 基于 `multiprocessing` 的独立扫描子进程，绕过 GIL 限制。
+- **Auth System**: 支持离线离机鉴权 + 后台 JWT 静默校验（基于 `py-machineid`）。
+
+## � 开发路线图 (Roadmap)
+
+我们正按计划向 `v1.0` 迈进：
+
+- [ ] **阶段一 (收尾项目)**: 性能调优、代码规范化、多环境打包验证。
+- [ ] **阶段二 (深度瘦身)**: 休眠文件管理、虚拟内存引导、僵尸 `node_modules` 扫描。
+- [ ] **阶段三 (搬家中心)**: 第三方大型应用无损迁移（基于 Junction 点）、磁盘大文件可视化看板。
+- [ ] **发布增强**: Inno Setup 自动安装向导、商用数字签名证书。
+
+## 🚀 开发者快速开始
+
+1. **环境准备**:
    ```bash
    pip install -r requirements.txt
    ```
-2. 运行程序:
+2. **启动程序**:
    ```bash
    python src/main.py
    ```
-
-## 📅 待办事项 (To-Do / Roadmap)
-
-以下是我们在向 `v1.0` 迈进过程中的重点实施规划（已验证了部分底层原理）：
-
-- [ ] **全自动安装程序 (Inno Setup)**: 提供一键傻瓜式静默安装向导，同时捆绑必装的 Windows VC++ 运行库。
-- [ ] **系统还原点自动创建 (SRSetRestorePoint)**: 在执行高危文件清理前，动态插入一次 Windows 系统级快照，供后悔还原。
-- [ ] **商业数字签名 (Code Signing)**: 申请商用 Ev 安全证书，全面根治由于没签名导致的杀毒软件“未知来源”弹窗和误报。
-- [ ] **全自动热更新规则库 (OTA)**: 支持云端静默下拉最新 AI 缓存清理协议字典（`file_kb.json`），长期保障引擎识别的鲜活性。
-- [ ] **清理后深度报表**: 以 Flet 呈现本次物理扫除文件的细粒度饼图与历史分析图表。
+3. **分发打包**:
+   ```bash
+   pyinstaller zenclean.spec --clean
+   ```
 
 ---
-> 💡 了解我们在上一个迭代所完成的改进，请查看 [Release Notes](RELEASE_NOTES.md)。项目发展长期规划详见 [Roadmap](docs/ROADMAP.md)。
+> 💡 更多详情请查阅 [docs/ROADMAP.md](docs/ROADMAP.md) 或 [CHANGELOG.md](CHANGELOG.md)。
