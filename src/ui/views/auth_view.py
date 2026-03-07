@@ -139,7 +139,7 @@ class AuthView(ft.Column):
                         ink=True,
                         on_click=lambda _: self.app.navigate_to("/scan")
                     ),
-                    ft.Text(f"当前版本: v{APP_VERSION} Beta", size=13, color=COLOR_ZEN_TEXT_DIM),
+                    ft.Text(f"当前版本: v{APP_VERSION}", size=13, color=COLOR_ZEN_TEXT_DIM),
                     ft.Container(height=5),
                     ft.ElevatedButton(
                         text="检查更新",
