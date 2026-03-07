@@ -37,29 +37,36 @@ def check_for_updates(on_result, manual=False):
             # 降级：如果商业网关未配置或失败，尝试 GitHub Release
             if UPDATE_CHECK_URL:
                 logger.info(f"[Updater] Fallback checking GitHub: {UPDATE_CHECK_URL}")
-                res = requests.get(UPDATE_CHECK_URL, timeout=5)
-                if res.status_code == 200:
-                    data = res.json()
-                    latest_version = data.get("tag_name", "").lstrip("v")
-                    current_clean = APP_VERSION.lstrip("v")
-                    
-                    if latest_version and latest_version != current_clean:
-                        # 强制丢弃 GitHub 原生的 html_url 释放地址，全部使用国内直链
-                        html_url = FALLBACK_DOWNLOAD_URL
-                        body = data.get("body", "发现了新的版本，建议您立刻更新。")
-                        on_result(True, latest_version, html_url, body)
-                        return
-                    elif manual:
-                        on_result(False, APP_VERSION, "", "通过全网检索，当前已是最新版本。")
-                        return
+                try:
+                    res = requests.get(UPDATE_CHECK_URL, timeout=8) # 稍微增加超时容忍度
+                    if res.status_code == 200:
+                        data = res.json()
+                        latest_version = data.get("tag_name", "").lstrip("v")
+                        current_clean = APP_VERSION.lstrip("v")
+                        
+                        if latest_version and latest_version != current_clean:
+                            # 强制丢弃 GitHub 原生的 html_url 释放地址，全部使用国内直链
+                            html_url = FALLBACK_DOWNLOAD_URL
+                            body = data.get("body", "发现了新的版本，建议您立刻更新。")
+                            on_result(True, latest_version, html_url, body)
+                            return
+                        elif manual:
+                            on_result(False, APP_VERSION, "", "通过云端检索，当前已是最新版本。")
+                            return
+                    elif res.status_code == 404:
+                        logger.info("[Updater] GitHub Release not found (404). Assuming no updates.")
+                        if manual:
+                            on_result(False, APP_VERSION, "", "云端尚未发布新版本，当前已是最新。")
+                            return
+                except Exception as e:
+                    logger.warning(f"[Updater] GitHub API check failed: {e}")
 
+            # 如果走到这里还没 return，说明要么没配置地址，要么全部失败
             if manual:
-                on_result(False, APP_VERSION, "", "无法连接到更新服务器，请稍后再试。")
-
+                on_result(False, APP_VERSION, "", "无法连接到更新服务器，请检查您的网络环境或稍后再试。")
         except Exception as e:
-            logger.error(f"[Updater] Error checking for updates: {e}")
+            logger.error(f"[Updater] Uncaught error in _check: {e}")
             if manual:
-                on_result(False, "", "", f"检查更新异常: {e}")
+                on_result(False, APP_VERSION, "", f"检查更新过程中出现异常: {e}")
 
     threading.Thread(target=_check, daemon=True).start()
-
