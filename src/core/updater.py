@@ -1,7 +1,7 @@
 import threading
 import requests
 import json
-from config.settings import UPDATE_CHECK_URL, APP_VERSION, LICENSE_SERVER_URLS
+from config.settings import UPDATE_CHECK_URL, APP_VERSION, LICENSE_SERVER_URLS, FALLBACK_DOWNLOAD_URL
 from core.logger import logger
 
 def check_for_updates(on_result, manual=False):
@@ -25,7 +25,7 @@ def check_for_updates(on_result, manual=False):
                         if data.get("code") == 200 and data.get("data"):
                             d = data["data"]
                             if d.get("has_update") and d.get("version") != APP_VERSION:
-                                on_result(True, d.get("version"), d.get("url"), d.get("desc", "发现新版本！"))
+                                on_result(True, d.get("version"), d.get("url") or FALLBACK_DOWNLOAD_URL, d.get("desc", "发现新版本！"))
                                 return
                             elif manual:
                                 on_result(False, APP_VERSION, "", "恭喜，当前已是最新版本。")
@@ -43,7 +43,8 @@ def check_for_updates(on_result, manual=False):
                     current_clean = APP_VERSION.lstrip("v")
                     
                     if latest_version and latest_version != current_clean:
-                        html_url = data.get("html_url", "")
+                        # 强制丢弃 GitHub 原生的 html_url 释放地址，全部使用国内直链
+                        html_url = FALLBACK_DOWNLOAD_URL
                         body = data.get("body", "发现了新的版本，建议您立刻更新。")
                         on_result(True, latest_version, html_url, body)
                         return

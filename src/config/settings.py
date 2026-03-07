@@ -8,10 +8,22 @@ from pathlib import Path
 
 try:
     from dotenv import load_dotenv
-    # 根据运行时位置，智能寻找工程根目录的 .env
-    _root = Path(__file__).parent.parent.parent
+    import sys
+
+    def _get_project_root() -> Path:
+        """
+        兼容源码运行与 PyInstaller 打包后的运行目录：
+        - 打包后：使用 sys._MEIPASS 指向的临时解包目录
+        - 源码运行：回退到 config 模块的上上级目录（项目根）
+        """
+        if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+            return Path(sys._MEIPASS)
+        return Path(__file__).parent.parent.parent
+
+    _root = _get_project_root()
     load_dotenv(dotenv_path=_root / ".env")
 except ImportError:
+    # 未安装 python-dotenv 时，静默跳过环境变量文件加载
     pass
 
 def _get_downloads_folder() -> str:
@@ -110,12 +122,16 @@ LOG_LEVEL = "INFO"             # 可通过设置页切换为 DEBUG
 LOG_RETENTION_DAYS = 7         # 保留最近 N 天的日志文件
 
 # ── 鉴权 ──────────────────────────────────────────────────────────────────────
-# 服务端节点列表（优先读取环境变量，以逗号分隔。开源/发布时隐藏真实节点）
+# 服务端节点列表（优先读取环境变量，以逗号分隔；否则使用占位默认值）
+# 真实生产环境的授权域名仅通过 `.env` / 系统环境变量配置，不写死在开源仓库中。
+DEFAULT_LICENSE_SERVER_URLS: list[str] = [
+    "https://your-license-server.com",
+]
 _env_urls = os.environ.get("LICENSE_SERVER_URLS", "")
 if _env_urls:
     LICENSE_SERVER_URLS = [u.strip() for u in _env_urls.split(",") if u.strip()]
 else:
-    LICENSE_SERVER_URLS = ["https://your-license-server.com"]
+    LICENSE_SERVER_URLS = DEFAULT_LICENSE_SERVER_URLS
 
 LICENSE_PRODUCT_ID = os.environ.get("LICENSE_PRODUCT_ID", "zenclean") # 产品ID
 # 第一阶段公测万能码
@@ -160,7 +176,11 @@ WINDOW_HEIGHT = 680
 
 # ── 版本更新检查 ───────────────────────────────────────────────────────────────
 # 留空则跳过更新检查（CI/离线环境使用）
-UPDATE_CHECK_URL = ""  # e.g. "https://api.github.com/repos/owner/zenclean/releases/latest"
+# 国内可使用镜像加速获取 API: https://ghfast.top/https://api.github.com/repos/hwdemtv/ZenClean/releases/latest
+UPDATE_CHECK_URL = "https://api.github.com/repos/hwdemtv/ZenClean/releases/latest"
+
+# 默认官方国内下载源（避开 GitHub Releases 的强壁垒）
+FALLBACK_DOWNLOAD_URL = "https://pan.quark.cn/s/ebbf7993cf2f"
 
 # ── 缓存 ───────────────────────────────────────────────────────────────────────
 AI_CACHE_FILE = APP_DATA_DIR / "ai_cache.json"
