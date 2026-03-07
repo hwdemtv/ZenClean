@@ -238,23 +238,23 @@ class ZenCleanApp(ft.Column):
         """
         处理来自后端的广播通知载荷，实现去重展示与强/弱提醒分离。
         """
-        from core.logger import logger
         if not note or not self.page: return
         note_id = note.get("id")
-        last_id = self.page.client_storage.get("last_notice_id")
+        content = note.get("content", "")
+        # 生成唯一标识：ID + 内容摘要，支持“同 ID 内容更新”重新提醒
+        notice_fingerprint = f"{note_id}_{hash(content)}"
         
-        logger.info(f"[Notification] Received: {note_id}, Last shown: {last_id}")
+        last_fingerprint = self.page.client_storage.get("last_notice_fingerprint")
         
-        if last_id == note_id:
-            logger.info(f"[Notification] ID {note_id} already shown. Skipping.")
+        from core.logger import logger
+        logger.info(f"[Notification] Check: {notice_fingerprint}, Last: {last_fingerprint}")
+        
+        if last_fingerprint == notice_fingerprint:
             return
 
         is_force = note.get("is_force", False)
         title = note.get("title", "系统消息")
-        content = note.get("content", "")
         url = note.get("action_url")
-        
-        logger.info(f"[Notification] Showing new notice: {title} (Force={is_force})")
         
         async def _ui_action():
             if is_force:
@@ -276,7 +276,7 @@ class ZenCleanApp(ft.Column):
                 self.page.snack_bar = ft.SnackBar(
                     content=ft.Row([
                         ft.Icon(ft.icons.NOTIFICATIONS, color=COLOR_ZEN_PRIMARY),
-                        ft.Text(f"{title}: {content}", size=13),
+                        ft.Text(f"{title}: {content[:40]}...", size=13),
                         ft.TextButton("去看看", on_click=lambda _: self.page.launch_url(url)) if url else ft.Container()
                     ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                     bgcolor="#1A1C22", duration=10000
@@ -284,8 +284,8 @@ class ZenCleanApp(ft.Column):
                 self.page.snack_bar.open = True
             
             self.page.update()
-            # 记录最后展示的 ID
-            self.page.client_storage.set("last_notice_id", note_id)
+            # 记录指纹，用于去重
+            self.page.client_storage.set("last_notice_fingerprint", notice_fingerprint)
 
         self.page.run_task(_ui_action)
 
