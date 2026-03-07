@@ -242,7 +242,7 @@ class ZenCleanApp(ft.Column):
         content = note.get("content", "")
         url = note.get("action_url")
         
-        def _ui_action():
+        async def _ui_action():
             if is_force:
                 def _close(e):
                     dlg.open = False
@@ -253,7 +253,7 @@ class ZenCleanApp(ft.Column):
                 dlg = ft.AlertDialog(
                     modal=True,
                     title=ft.Row([ft.Icon(ft.icons.CAMPAIGN, color=COLOR_ZEN_PRIMARY), ft.Text(title)]),
-                    content=ft.Text(content),
+                    content=ft.Row([ft.Text(content)], scroll=ft.ScrollMode.AUTO),
                     actions=actions,
                 )
                 self.page.overlay.append(dlg)
@@ -268,7 +268,9 @@ class ZenCleanApp(ft.Column):
                     bgcolor="#1A1C22", duration=10000
                 )
                 self.page.snack_bar.open = True
+            
             self.page.update()
+            # 记录最后展示的 ID
             self.page.client_storage.set("last_notice_id", note_id)
 
         self.page.run_task(_ui_action)
