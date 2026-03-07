@@ -238,14 +238,23 @@ class ZenCleanApp(ft.Column):
         """
         处理来自后端的广播通知载荷，实现去重展示与强/弱提醒分离。
         """
+        from core.logger import logger
         if not note or not self.page: return
         note_id = note.get("id")
-        if self.page.client_storage.get("last_notice_id") == note_id: return
+        last_id = self.page.client_storage.get("last_notice_id")
+        
+        logger.info(f"[Notification] Received: {note_id}, Last shown: {last_id}")
+        
+        if last_id == note_id:
+            logger.info(f"[Notification] ID {note_id} already shown. Skipping.")
+            return
 
         is_force = note.get("is_force", False)
         title = note.get("title", "系统消息")
         content = note.get("content", "")
         url = note.get("action_url")
+        
+        logger.info(f"[Notification] Showing new notice: {title} (Force={is_force})")
         
         async def _ui_action():
             if is_force:
