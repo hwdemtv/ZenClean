@@ -134,6 +134,39 @@ class ZenCleanApp(ft.Column):
         # 共享数据层
         self.scan_nodes: list[dict] = []
         
+        # 启动时进行一次延时的静默版本检查广播接收
+        self._start_silent_update_check()
+        
+    def _start_silent_update_check(self):
+        import time
+        import threading
+        from core.updater import check_for_updates
+
+        def _silent_callback(has_new, latest_version, url, msg):
+            if has_new:
+                # 接收到含更新的高能通知，展示顶部提示条
+                def _ui_update():
+                    self.page.snack_bar = ft.SnackBar(
+                        content=ft.Row([
+                            ft.Icon(ft.icons.SYSTEM_UPDATE, color=COLOR_ZEN_PRIMARY),
+                            ft.Text(f"系统播报：发现新版本 v{latest_version}，{msg}"),
+                            ft.TextButton("立即去下载", on_click=lambda _: self.page.launch_url(url) if url else None)
+                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        bgcolor="#252525",
+                        duration=15000,
+                    )
+                    self.page.snack_bar.open = True
+                    self.page.update()
+                
+                if self.page:
+                    self.page.invoke_callback(_ui_update)
+                
+        def _delayed_check():
+            time.sleep(8)  # 避开启动首屏资源高峰
+            check_for_updates(_silent_callback, manual=False)
+            
+        threading.Thread(target=_delayed_check, daemon=True).start()
+        
         # 启动时进行离线免联鉴权（启动阶段跳过网络对时，极致加速）
         from core.auth import check_local_auth_status
         is_val, payload = check_local_auth_status(is_startup=True)

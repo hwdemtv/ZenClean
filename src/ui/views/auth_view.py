@@ -165,10 +165,18 @@ class AuthView(ft.Column):
                 bgcolor="#252525"
             )
         else:
+            self._diag_button = ft.TextButton(
+                text="网络连接有问题？点击进行诊断",
+                style=ft.ButtonStyle(color=ft.colors.BLUE_400),
+                visible=False,
+                on_click=self._run_network_diagnosis
+            )
+            
             content_col = ft.Column([
                 self._code_input,
                 self._terms_row,
                 self._error_text,
+                self._diag_button,
                 ft.Container(height=10),
                 submit_btn,
             ])
@@ -297,17 +305,133 @@ class AuthView(ft.Column):
             self._error_text.value = msg
             self._error_text.visible = True
             
+            # 如果错误消息包含网络连接失败，显示诊断按钮
+            if "网络连接失败" in msg or "连接" in msg:
+                self._diag_button.visible = True
+            else:
+                self._diag_button.visible = False
+            
         self.update()
 
     def _on_check_update_click(self, e):
-        """点击检查更新：此处暂时作为弹窗占位，避免出现未绑定方法的 AttributeError"""
-        self.page.snack_bar = ft.SnackBar(
-            ft.Text("自动检查更新功能将在阶段二正式开放，敬请期待！"),
-            bgcolor=COLOR_ZEN_PRIMARY
-        )
-        self.page.snack_bar.open = True
-        self.page.update()
+        """用户点击检查更新按钮"""
+        btn = e.control
+        btn.disabled = True
+        btn.text = "正在检查..."
+        self.update()
 
+        def _update_callback(has_new, latest_version, url, msg):
+            def _ui_update():
+                btn.disabled = False
+                btn.text = "检查更新"
+                self.update()
+                
+                if has_new:
+                    dlg = ft.AlertDialog(
+                        title=ft.Row([
+                            ft.Icon(ft.icons.SYSTEM_UPDATE, color=COLOR_ZEN_PRIMARY),
+                            ft.Text("发现新版本")
+                        ]),
+                        content=ft.Column([
+                            ft.Text(f"最新版本：{latest_version}", weight=ft.FontWeight.BOLD),
+                            ft.Text(f"当前版本：v{APP_VERSION}"),
+                            ft.Container(height=10),
+                            ft.Text("更新内容说明：", color=COLOR_ZEN_TEXT_DIM),
+                            ft.Text(msg, size=13, selectable=True),
+                        ], tight=True, scroll=ft.ScrollMode.AUTO),
+                        actions=[
+                            ft.TextButton("去下载", on_click=lambda _: self.page.launch_url(url) if url else None),
+                            ft.TextButton("稍后再说", on_click=lambda _: self._close_dlg(dlg))
+                        ],
+                        actions_alignment=ft.MainAxisAlignment.END,
+                    )
+                    self.page.overlay.append(dlg)
+                    dlg.open = True
+                    self.page.update()
+                else:
+                    self.page.snack_bar = ft.SnackBar(
+                        ft.Text(msg),
+                        bgcolor=COLOR_ZEN_PRIMARY if "最新版本" in msg else ft.colors.RED_400
+                    )
+                    self.page.snack_bar.open = True
+                    self.page.update()
+                    
+            if self.page:
+                self.page.invoke_callback(_ui_update)
+
+        from core.updater import check_for_updates
+        check_for_updates(_update_callback, manual=True)
+
+    def _run_network_diagnosis(self, e):
+        """运行网络诊断并显示结果"""
+        from config.settings import LICENSE_SERVER_URLS
+        from core.logger import logger
+        
+        # 显示加载状态
+        self._diag_button.text = "正在诊断网络..."
+        self._diag_button.disabled = True
+        self.update()
+        
+        import threading
+        def _diagnose():
+            try:
+                from utils.network_diag import run_full_diagnosis
+                report = run_full_diagnosis(LICENSE_SERVER_URLS)
+                
+                # 在主线程中更新UI
+                def _update_ui():
+                    dlg = ft.AlertDialog(
+                        title=ft.Text("网络诊断结果"),
+                        content=ft.Column([
+                            ft.Text(report, font_family="monospace", size=12)
+                        ], scroll=ft.ScrollMode.AUTO, tight=True),
+                        actions=[
+                            ft.TextButton("复制到剪贴板", on_click=lambda _: self._copy_to_clipboard(report)),
+                            ft.TextButton("关闭", on_click=lambda _: self._close_dlg(dlg))
+                        ],
+                        actions_alignment=ft.MainAxisAlignment.END
+                    )
+                    self.page.overlay.append(dlg)
+                    dlg.open = True
+                    self.page.update()
+                    
+                    # 恢复诊断按钮
+                    self._diag_button.text = "网络连接有问题？点击进行诊断"
+                    self._diag_button.disabled = False
+                    self.update()
+                
+                self.page.invoke_callback(_update_ui)
+                
+            except Exception as ex:
+                logger.error(f"网络诊断失败: {ex}")
+                def _show_error():
+                    self.page.snack_bar = ft.SnackBar(
+                        ft.Text(f"诊断失败: {ex}"),
+                        bgcolor=ft.colors.RED_400
+                    )
+                    self.page.snack_bar.open = True
+                    self.page.update()
+                    
+                    self._diag_button.text = "网络连接有问题？点击进行诊断"
+                    self._diag_button.disabled = False
+                    self.update()
+                self.page.invoke_callback(_show_error)
+        
+        threading.Thread(target=_diagnose, daemon=True).start()
+    
+    def _copy_to_clipboard(self, text: str):
+        """复制文本到剪贴板"""
+        try:
+            import pyperclip
+            pyperclip.copy(text)
+            self.page.snack_bar = ft.SnackBar(ft.Text("已复制到剪贴板"))
+            self.page.snack_bar.open = True
+            self.page.update()
+        except:
+            self.page.snack_bar = ft.SnackBar(ft.Text("复制失败，请手动复制"))
+            self.page.snack_bar.open = True
+            self.page.update()
+    
     def did_mount(self):
         """视图挂载后异步加载 AI 额度"""
         if self.app.is_activated:
