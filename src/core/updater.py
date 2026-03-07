@@ -36,13 +36,13 @@ def check_for_updates(on_result, manual=False):
                 except Exception as e:
                     logger.warning(f"[Updater] Backend API check failed (ignore if not deployed): {e}")
 
-            # 降级：如果商业网关未配置或失败，尝试多重镜像轮询 (GitHub Release)
-            # 定义国内高质量镜像列表，按稳定性排序
+            # 降级：如果商业网关未配置或失败，尝试多重镜像轮询 (GitHub Releases)
+            # 方案优化：改用 /releases 列表接口，以支持获取最新的 Pre-release 版本 (Beta 版常用)
             MIRRORS = [
-                "https://api.kkgithub.com/repos/hwdemtv/ZenClean/releases/latest",
-                "https://gh-api.99988866.xyz/repos/hwdemtv/ZenClean/releases/latest",
-                "https://ghapi.paniy.xyz/repos/hwdemtv/ZenClean/releases/latest",
-                "https://api.github.com/repos/hwdemtv/ZenClean/releases/latest" # 官方兜底
+                "https://api.kkgithub.com/repos/hwdemtv/ZenClean/releases",
+                "https://gh-api.99988866.xyz/repos/hwdemtv/ZenClean/releases",
+                "https://ghapi.paniy.xyz/repos/hwdemtv/ZenClean/releases",
+                "https://api.github.com/repos/hwdemtv/ZenClean/releases" 
             ]
             
             headers = {'User-Agent': f'ZenClean-Client/{APP_VERSION}'}
@@ -53,28 +53,30 @@ def check_for_updates(on_result, manual=False):
                     
                     if res.status_code == 200:
                         data = res.json()
-                        latest_version = data.get("tag_name", "").lstrip("v")
+                        if not data or not isinstance(data, list):
+                            continue
+                            
+                        # 获取列表中的第一个 Release (即绝对意义上的最新版，包含 Prerelease)
+                        latest_release = data[0]
+                        latest_version = latest_release.get("tag_name", "").lstrip("v")
                         current_clean = APP_VERSION.lstrip("v")
                         
                         if latest_version and latest_version != current_clean:
-                            # 强制丢弃 GitHub 原生的 html_url 释放地址，全部使用国内直链
                             html_url = FALLBACK_DOWNLOAD_URL
-                            body = data.get("body", "发现了新的版本，建议您立刻更新。")
+                            body = latest_release.get("body", "发现了新的版本，建议您立刻更新。")
                             on_result(True, latest_version, html_url, body)
                             return
                         elif manual:
                             on_result(False, APP_VERSION, "", "恭喜，当前已是最新版本。")
                             return
                     elif res.status_code == 404:
-                        logger.info(f"[Updater] 404 on {mirror_url}, repo may have no releases.")
-                        if manual:
-                            on_result(False, APP_VERSION, "", "云端尚未发布新版本，当前已是最新。")
-                            return
+                        logger.info(f"[Updater] 404 on {mirror_url}")
+                        continue
                     else:
                         logger.warning(f"[Updater] Mirror {mirror_url} returned {res.status_code}")
                 except Exception as e:
                     logger.warning(f"[Updater] Mirror {mirror_url} failed: {e}")
-                    continue # 尝试下一个镜像
+                    continue
 
             # 如果走到这里还没 return，说明要么没配置地址，要么全部失败
             if manual:
