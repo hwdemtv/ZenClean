@@ -89,6 +89,7 @@ def verify_license_online(license_key: str, is_auto_check: bool = False) -> tupl
 
     # 循环请求各节点
     last_error_msg = "网络连接失败，请检查网络"
+    connection_errors = []
     
     for url in LICENSE_SERVER_URLS:
         try:
@@ -153,9 +154,19 @@ def verify_license_online(license_key: str, is_auto_check: bool = False) -> tupl
                     last_error_msg = f"服务端异常: {res.status_code} ({res.text[:100]})"
                 logger.warning(f"Server {url} returned {res.status_code}: {res.text}")
         except requests.RequestException as e:
-            logger.warning(f"Failed to connect to {url}: {e}")
+            # 对用户提示屏蔽具体域名，仅保留错误类型；完整细节写入日志便于排查
+            error_detail = f"{type(e).__name__}: {str(e)[:100]}"
+            connection_errors.append(error_detail)
+            logger.warning(f"Failed to connect to license server {url}: {e}")
             continue
 
+    # 增强错误消息，包含诊断信息（但不暴露具体域名）
+    if connection_errors:
+        error_msg = "网络连接失败，请检查网络\n\n详细错误:\n"
+        error_msg += "\n".join(f"- {e}" for e in connection_errors[:2])
+        error_msg += "\n\n建议: 检查防火墙/杀毒软件是否拦截了 ZenClean 的网络请求，或联系管理员排查代理/网关策略"
+        return False, error_msg
+    
     return False, last_error_msg
 
 

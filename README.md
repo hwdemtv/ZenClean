@@ -49,22 +49,27 @@
 
 ## 🚀 开发者快速开始
 
-1. **环境准备**:
+1. **配置环境变量文件（重要）**:
+   - 本仓库不会提交真实的 `.env`，请先将根目录下的 `.env.example` 复制为 `.env`，并按自己的环境修改里面的 `LICENSE_SERVER_URLS` / `AI_GATEWAY_BASE_URL` 等变量。
+   - 若你只是本地体验官方云端服务，可直接使用示例中的默认值。
+
+2. **环境准备**:
    ```bash
    pip install -r requirements.txt
    ```
-2. **启动程序**:
+3. **启动程序**:
    ```bash
    python src/main.py
    ```
-3. **分发打包**:
+4. **分发打包**:
    ```bash
    pyinstaller zenclean.spec --clean
    ```
 
+
 ---
 ## 🚀 极速上手
-1. 下载并解压 `ZenClean_0.1.0_Beta.zip`。
+1. 下载并解压 `ZenClean_0.1.1_Beta.zip`。
 2. **双击运行 `ZenClean.exe`**。
 3. 若提示“缺少运行库”，按引导完成 Visual C++ 安装。
 
