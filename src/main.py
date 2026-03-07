@@ -120,12 +120,30 @@ if __name__ == "__main__":
             ret = ctypes.windll.shell32.ShellExecuteW(
                 None, "runas", target_cmd, params, None, 1
             )
-            if ret > 32:
+            if int(ret) > 32:
                 # 提权并且拉起成功，退出当前非管理员进程
                 sys.exit(0)
             else:
+                # 用户可能点击了“取消”或者提权失败
                 from core.logger import logger
-                logger.warning(f"Failed to elevate privileges. Return code: {ret}")
+                logger.warning(f"UAC Elevation declined or failed. Return code: {ret}")
+                
+                # 弹窗提示用户，争取二次确认
+                msg = (
+                    "ZenClean 需要管理员权限才能：\n"
+                    "1. 扫描 Windows 更新等受限系统目录\n"
+                    "2. 深度释放 16GB+ 的系统休眠文件\n"
+                    "3. 拦截高危的 AI 本地误删操作\n\n"
+                    "是否重新尝试提权？（选择‘否’将以标准版运行，清理深度受限）"
+                )
+                # 0x00000004 = MB_YESNO, 0x00000030 = MB_ICONWARNING
+                res = ctypes.windll.user32.MessageBoxW(0, msg, "ZenClean - 权限提醒", 0x00000004 | 0x00000030)
+                if res == 6: # IDYES
+                    # 递归尝试（这里直接 sys.executable 重跑即可）
+                    ctypes.windll.shell32.ShellExecuteW(None, "runas", target_cmd, params, None, 1)
+                    sys.exit(0)
+                else:
+                    logger.info("User chose to run in standard mode without UAC.")
         except Exception as e:
             from core.logger import logger
             logger.error(f"Error during UAC elevation: {e}")
