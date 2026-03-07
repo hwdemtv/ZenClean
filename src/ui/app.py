@@ -4,8 +4,13 @@ from typing import Optional
 from datetime import datetime
 
 from config.settings import (
-    COLOR_ZEN_BG, COLOR_ZEN_SURFACE, 
-    COLOR_ZEN_GOLD, COLOR_ZEN_DIVIDER, COLOR_ZEN_TEXT_MAIN, COLOR_ZEN_TEXT_DIM
+    AUTH_DAT_PATH,
+    LICENSE_PRODUCT_ID,
+    LICENSE_SERVER_URLS,
+    NTP_MAX_DRIFT_SECONDS,
+    COLOR_ZEN_BG, COLOR_ZEN_SURFACE,
+    COLOR_ZEN_GOLD, COLOR_ZEN_DIVIDER, COLOR_ZEN_TEXT_MAIN, COLOR_ZEN_TEXT_DIM,
+    COLOR_ZEN_PRIMARY
 )
 from ui.views.scan_view import ScanView
 from ui.views.migration_view import MigrationView
