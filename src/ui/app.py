@@ -198,52 +198,80 @@ class ZenCleanApp(ft.Column):
                     time.sleep(2)
 
                     while True:
-                        # 如果已经被其他机制降级（例如在前台点退出、或者上一次轮询已经降级），直接退出探测循环
                         if not self.is_activated:
                             break
 
-                        # 传入 is_auto_check=True，防止服务端对于已解绑的激活码执行误判自动重新绑定
-                        success, msg = verify_license_online(license_key, is_auto_check=True)
+                        # 支持通知对象解包
+                        success, msg, note = verify_license_online(license_key, is_auto_check=True)
                         logger.info(f"[BG_VERIFY] result: success={success}, msg={msg}")
                         
+                        # 如果有来自云端的广播通知，立即处理
+                        if note:
+                            self.process_server_notification(note)
+
                         if not success and ("[REVOKED]" in msg or ("网络" not in msg and "服务端异常" not in msg)):
-                            # 以下的所有 UI 操作必须在主循环或其协程中安全执行，否则会引发线程死锁
                             async def update_ui_safe():
                                 logger.warning(f"[BG_VERIFY] license revoked! Executing downgrade.")
-                                # 主动清除本地验证状态，降级为非 VIP
                                 if AUTH_DAT_PATH.exists():
-                                    try:
-                                        AUTH_DAT_PATH.unlink()
-                                        logger.info("[BG_VERIFY] Local auth cache removed.")
-                                    except Exception as e:
-                                        logger.error(f"[BG_VERIFY] Failed to remove auth cache: {e}")
-                                        pass
-                                
+                                    try: AUTH_DAT_PATH.unlink()
+                                    except: pass
                                 self.set_activated(False)
-
-                                # 获取明确的拦截原因
-                                alert_msg = "您的授权已失效或在其他设备被解绑，当前已恢复为免费版。"
-                                if "[REVOKED]" in msg:
-                                    alert_msg = msg.replace("[REVOKED]", "").strip()
-
-                                # 弹窗提示用户授权已失效
-                                self.page.snack_bar = ft.SnackBar(
-                                    ft.Text(alert_msg),
-                                    bgcolor=ft.colors.RED_800,
-                                )
+                                alert_msg = msg.replace("[REVOKED]", "").strip() if "[REVOKED]" in msg else "您的授权已失效，当前已恢复为免费版。"
+                                self.page.snack_bar = ft.SnackBar(ft.Text(alert_msg), bgcolor=ft.colors.RED_800)
                                 self.page.snack_bar.open = True
                                 self.page.update()
 
-                            # 送入 Flet 主 UI 线程的安全更新队列
                             self.page.run_task(update_ui_safe)
-                            
-                            # 已经完成降级，停止循环探测
                             break
                             
-                        # 没问题的话，睡半小时再检查兜底
+                        # 每半小时巡检一次
                         time.sleep(1800)
 
                 threading.Thread(target=_bg_verify, daemon=True).start()
+
+    def process_server_notification(self, note: dict):
+        """
+        处理来自后端的广播通知载荷，实现去重展示与强/弱提醒分离。
+        """
+        if not note or not self.page: return
+        note_id = note.get("id")
+        if self.page.client_storage.get("last_notice_id") == note_id: return
+
+        is_force = note.get("is_force", False)
+        title = note.get("title", "系统消息")
+        content = note.get("content", "")
+        url = note.get("action_url")
+        
+        def _ui_action():
+            if is_force:
+                def _close(e):
+                    dlg.open = False
+                    self.page.update()
+                actions = [ft.TextButton("我知道了", on_click=_close)]
+                if url:
+                    actions.insert(0, ft.ElevatedButton("查看详情", on_click=lambda _: self.page.launch_url(url)))
+                dlg = ft.AlertDialog(
+                    modal=True,
+                    title=ft.Row([ft.Icon(ft.icons.CAMPAIGN, color=COLOR_ZEN_PRIMARY), ft.Text(title)]),
+                    content=ft.Text(content),
+                    actions=actions,
+                )
+                self.page.overlay.append(dlg)
+                dlg.open = True
+            else:
+                self.page.snack_bar = ft.SnackBar(
+                    content=ft.Row([
+                        ft.Icon(ft.icons.NOTIFICATIONS, color=COLOR_ZEN_PRIMARY),
+                        ft.Text(f"{title}: {content}", size=13),
+                        ft.TextButton("去看看", on_click=lambda _: self.page.launch_url(url)) if url else ft.Container()
+                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                    bgcolor="#1A1C22", duration=10000
+                )
+                self.page.snack_bar.open = True
+            self.page.update()
+            self.page.client_storage.set("last_notice_id", note_id)
+
+        self.page.run_task(_ui_action)
 
 
     def set_activated(self, is_activated: bool, lease_expiry: Optional[str] = None, total_expiry: Optional[str] = None):

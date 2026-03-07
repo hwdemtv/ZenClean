@@ -34,7 +34,7 @@
 ## 🏗️ 技术架构 (Tech Stack)
 
 - **UI Framework**: [Flet](https://flet.dev/) (基于 Flutter 实现的 Python 声明式 UI 框架)
-- **AI Engine**: 集成智谱 GLM-4 真实云端分析，支持智能风险研判。
+- **AI Engine**: 集成智谱清言大模型，真实云端分析，支持智能风险研判。
 - **IPC Engine**: 基于 `multiprocessing` 的独立扫描子进程，绕过 GIL 限制。
 - **Auth System**: 支持离线离机鉴权 + 后台 JWT 静默校验（基于 `py-machineid`）。
 

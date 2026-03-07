@@ -320,10 +320,12 @@ class ScanView(ft.Column):
                 if not license_key:
                     return
 
-                # 并发执行网络核验
-                success, msg = await asyncio.to_thread(verify_license_online, license_key, True) # is_auto_check=True
+                # 扫描前在线复核权限，支持通知解包
+                is_val, msg, note = await asyncio.to_thread(verify_license_online, license_key)
+                if note:
+                    self.app.process_server_notification(note)
                 
-                if not success and ("[REVOKED]" in msg or ("网络" not in msg and "服务端异常" not in msg)):
+                if not is_val and ("[REVOKED]" in msg or ("网络" not in msg and "服务端异常" not in msg)):
                     logger.warning(f"Scan license check failed: license revoked/unbound on backend. {msg}")
                     
                     # 【核心优化】不再熔断中止扫描，而是静默执行 UI 降级并删除本地令牌

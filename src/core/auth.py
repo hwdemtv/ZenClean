@@ -69,11 +69,12 @@ def get_device_name() -> str:
         logger.error(f"Failed to get device name: {e}")
         return "Unknown-Device"
 
-def verify_license_online(license_key: str, is_auto_check: bool = False) -> tuple[bool, str]:
+def verify_license_online(license_key: str, is_auto_check: bool = False) -> tuple[bool, str, Optional[dict]]:
     """
     通过 HTTP POST 向 hw-license-center 发起在线校验。
     成功则缓存 JWT token 到本地 AUTH_DAT_PATH。
     is_auto_check=True: 标识本次为后台静默探活，请求服务端『仅查询状态，禁止自动接管闲置的激活码并绑定当前设备』。
+    返回: (是否成功, 消息, 可选的通知对象)
     """
     device_id = get_device_id()
     device_name = get_device_name()
@@ -94,6 +95,14 @@ def verify_license_online(license_key: str, is_auto_check: bool = False) -> tupl
     for url in LICENSE_SERVER_URLS:
         try:
             res = requests.post(f"{url}/api/v1/auth/verify", json=payload, timeout=10)
+            # 无论成功失败，尝试抓取可能存在的全局广播通知
+            notification = None
+            try:
+                res_data = res.json()
+                notification = res_data.get("notification")
+            except Exception:
+                pass
+
             if res.status_code == 200:
                 data = res.json()
                 if data.get("success"):
@@ -127,7 +136,7 @@ def verify_license_online(license_key: str, is_auto_check: bool = False) -> tupl
                                         # 为了严格尊重管理员在后台的“解绑”操作，静默探活时我们主动拒绝这种被动重绑，并执行本地降级。
                                         if new_iat > old_iat:
                                             logger.warning(f"Detected auto-rebind (server iat > local iat). This means the device was unbound and auto-rebound. Blocking.")
-                                            return False, "[REVOKED] 您的设备已在后台解绑，请重新输入激活码"
+                                            return False, "[REVOKED] 您的设备已在后台解绑，请重新输入激活码", notification
                                     except Exception as e:
                                         logger.error(f"Failed to compare tokens for auto-rebind prevention: {e}")
                             
@@ -135,13 +144,13 @@ def verify_license_online(license_key: str, is_auto_check: bool = False) -> tupl
                             # 掩盖具体 URL，防止日志暴露验证节点
                             masked_url = f"{url.split('//')[0]}//{url.split('//')[1].split('.')[0]}.***.***" if "//" in url else "***"
                             logger.info(f"Online verification passed via {masked_url}. Token cached.")
-                            return True, "激活成功"
+                            return True, "激活成功", notification
                         else:
-                            return False, "服务端未返回授权令牌"
+                            return False, "服务端未返回授权令牌", notification
                     else:
-                        return False, "未发现有效的本产品订阅"
+                        return False, "未发现有效的本产品订阅", notification
                 else:
-                    return False, data.get("msg", "验证失败")
+                    return False, data.get("msg", "验证失败"), notification
             else:
                 # 尝试解析 4xx 业务级拦截的 JSON 错误信息
                 try:
@@ -149,7 +158,7 @@ def verify_license_online(license_key: str, is_auto_check: bool = False) -> tupl
                     last_error_msg = err_data.get("msg", f"授权拒绝: {res.status_code}")
                     # 对于 400/401/403/404 明确的授权失效，返回特殊标识以触发客户端降级
                     if res.status_code in (400, 401, 403, 404):
-                        return False, f"[REVOKED] {last_error_msg}"
+                        return False, f"[REVOKED] {last_error_msg}", notification
                 except Exception:
                     last_error_msg = f"服务端异常: {res.status_code} ({res.text[:100]})"
                 logger.warning(f"Server {url} returned {res.status_code}: {res.text}")
@@ -165,8 +174,6 @@ def verify_license_online(license_key: str, is_auto_check: bool = False) -> tupl
         error_msg = "网络连接失败，请检查网络\n\n详细错误:\n"
         error_msg += "\n".join(f"- {e}" for e in connection_errors[:2])
         error_msg += "\n\n建议: 检查防火墙/杀毒软件是否拦截了 ZenClean 的网络请求，或联系管理员排查代理/网关策略"
-        return False, error_msg
-    
     return False, last_error_msg
 
 
