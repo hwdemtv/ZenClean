@@ -357,7 +357,7 @@ class AuthView(ft.Column):
                     self.page.update()
                     
             if self.page:
-                self.page.invoke_callback(_ui_update)
+                self.page.run_task(_ui_update)
 
         from core.updater import check_for_updates
         check_for_updates(_update_callback, manual=True)
@@ -400,7 +400,7 @@ class AuthView(ft.Column):
                     self._diag_button.disabled = False
                     self.update()
                 
-                self.page.invoke_callback(_update_ui)
+                self.page.run_task(_update_ui)
                 
             except Exception as ex:
                 logger.error(f"网络诊断失败: {ex}")
@@ -415,7 +415,7 @@ class AuthView(ft.Column):
                     self._diag_button.text = "网络连接有问题？点击进行诊断"
                     self._diag_button.disabled = False
                     self.update()
-                self.page.invoke_callback(_show_error)
+                self.page.run_task(_show_error)
         
         threading.Thread(target=_diagnose, daemon=True).start()
     

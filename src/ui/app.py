@@ -159,7 +159,7 @@ class ZenCleanApp(ft.Column):
                     self.page.update()
                 
                 if self.page:
-                    self.page.invoke_callback(_ui_update)
+                    self.page.run_task(_ui_update)
                 
         def _delayed_check():
             time.sleep(8)  # 避开启动首屏资源高峰
