@@ -157,12 +157,12 @@ class AuthView(ft.Column):
                             shape=ft.RoundedRectangleBorder(radius=8),
                         )
                     )
-                ], spacing=5, alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, tight=True),
-                padding=40,
-                width=600,
+                ], spacing=2, alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, tight=True),
+                padding=30,
+                width=550,
                 border=ft.border.all(1, COLOR_ZEN_GOLD),
-                border_radius=10,
-                bgcolor="#252525"
+                border_radius=12,
+                bgcolor="#202226"
             )
         else:
             self._diag_button = ft.TextButton(
@@ -177,23 +177,22 @@ class AuthView(ft.Column):
                 self._terms_row,
                 self._error_text,
                 self._diag_button,
-                ft.Container(height=10),
+                ft.Container(height=5),
                 submit_btn,
-            ])
+            ], spacing=10)
 
         super().__init__(
             controls=[
                 ft.Column([
-                    ft.Text("激活 ZenClean VIP 特权", size=24, weight=ft.FontWeight.BOLD, color=COLOR_ZEN_TEXT_MAIN),
-                    ft.Text("输入激活码以解锁本地 AI 高级扫描与一键清除能力。", color=COLOR_ZEN_TEXT_DIM),
+                    ft.Text("激活 ZenClean VIP 特权", size=22, weight=ft.FontWeight.BOLD, color=COLOR_ZEN_TEXT_MAIN),
+                    ft.Text("输入激活码以解锁本地 AI 高级扫描与一键清除能力。", color=COLOR_ZEN_TEXT_DIM, size=13),
                 ], horizontal_alignment=ft.CrossAxisAlignment.CENTER if self.app.is_activated else ft.CrossAxisAlignment.START),
-                ft.Container(height=15),
+                ft.Container(height=10),
                 content_col,
-                ft.Container(height=15),
             ],
             expand=True,
-            scroll=ft.ScrollMode.AUTO,
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER if self.app.is_activated else ft.CrossAxisAlignment.START
+            alignment=ft.MainAxisAlignment.CENTER,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER
         )
 
 
