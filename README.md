@@ -63,4 +63,9 @@
    ```
 
 ---
+## 🚀 极速上手
+1. 下载并解压 `ZenClean_0.1.0_Beta.zip`。
+2. **双击运行 `ZenClean.exe`**。
+3. 若提示“缺少运行库”，按引导完成 Visual C++ 安装。
+
 > 💡 更多详情请查阅 [docs/ROADMAP.md](docs/ROADMAP.md) 或 [CHANGELOG.md](CHANGELOG.md)。
