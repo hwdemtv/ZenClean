@@ -180,7 +180,7 @@ WINDOW_HEIGHT = 680
 UPDATE_CHECK_URL = "https://api.kkgithub.com/repos/hwdemtv/ZenClean/releases/latest"
 
 # 默认官方国内下载源（避开 GitHub Releases 的强壁垒）
-FALLBACK_DOWNLOAD_URL = "https://pan.quark.cn/s/ebbf7993cf2f"
+FALLBACK_DOWNLOAD_URL = "https://pan.quark.cn/s/38bdcc92a943"
 
 # ── 缓存 ───────────────────────────────────────────────────────────────────────
 AI_CACHE_FILE = APP_DATA_DIR / "ai_cache.json"
