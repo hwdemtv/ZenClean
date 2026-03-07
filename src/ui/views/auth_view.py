@@ -262,7 +262,10 @@ class AuthView(ft.Column):
             
             logger.info(f"Starting online verification for code: {code}")
             from core.auth import verify_license_online
-            success, msg = verify_license_online(code)
+            # 修正签名解包，增加通知处理
+            success, msg, note = verify_license_online(code)
+            if note:
+                self.app.process_server_notification(note)
             logger.info(f"Online verification result: success={success}, msg={msg}")
             
             # 恢复 UI 状态
