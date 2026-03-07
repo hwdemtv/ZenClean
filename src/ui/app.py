@@ -87,7 +87,7 @@ class ZenCleanApp(ft.Column):
                 ft.NavigationRailDestination(
                     icon=ft.icons.CLEANING_SERVICES_OUTLINED,
                     selected_icon=ft.icons.CLEANING_SERVICES,
-                    label="智能清扫",
+                    label="禅清看板",
                 ),
                 ft.NavigationRailDestination(
                     icon=ft.icons.DATA_SAVER_OFF_OUTLINED,

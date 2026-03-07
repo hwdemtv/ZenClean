@@ -126,17 +126,17 @@ class ScanView(ft.Column):
         self._donut_used = ft.PieChartSection(value=total_gb, color="#252A36", radius=25) 
         self._donut_free = ft.PieChartSection(value=0.01, color=COLOR_ZEN_PRIMARY, radius=30)
         
-        # 左侧：数据洞察区 (Analytics Panel)
+        # ── 左侧：数据洞察区 (Analytics Panel) ──
         _donut_chart = ft.PieChart(
             sections=[self._donut_used, self._donut_free],
             sections_space=2,
             center_space_radius=90,
             expand=True,
         )
-
         self._free_text_control = ft.Text("0.0 GB", size=32, weight=ft.FontWeight.BOLD, color=COLOR_ZEN_PRIMARY, font_family="Consolas")
         
-        _analytics_panel = ft.Container(
+        # 增强版：霓虹发光圆环
+        _glow_donut = ft.Container(
             content=ft.Stack([
                 _donut_chart,
                 ft.Container(
@@ -149,30 +149,88 @@ class ScanView(ft.Column):
                     alignment=ft.alignment.center,
                 ),
             ]),
-            expand=4, # 占位比重 4
+            expand=4,
             padding=20,
-            alignment=ft.alignment.center, # 环形图垂直居中
+            alignment=ft.alignment.center,
+            # 引入多层霓虹光晕模拟
+            shadow=ft.BoxShadow(
+                spread_radius=-10,
+                blur_radius=60,
+                color=ft.colors.with_opacity(0.15, COLOR_ZEN_PRIMARY),
+                offset=ft.Offset(0, 0),
+            )
         )
 
-        # 右侧：引擎执行区 - 闲置态 (Idle)
-        self._idle_execution = ft.Container(
-            content=ft.Column(
-                [
-                    ft.Text("系统深度体检", size=32, weight=ft.FontWeight.W_800, color=COLOR_ZEN_TEXT_MAIN),
-                    ft.Text("通过本地 Rule Engine 与双重粉碎法，安全释放您的磁盘空间", color=COLOR_ZEN_TEXT_DIM, size=13),
-                    ft.Container(height=20),
-                    self._quota_label,
-                    ft.Container(height=5),
-                    self._scan_btn,
-                    ft.Container(height=15),
-                    ft.Text("基于本地 Rule Engine · 预计扫查耗时 1.8s", size=11, color="#6B7280"),
-                ],
-                alignment=ft.MainAxisAlignment.CENTER,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=8,
-            ),
+        # ── 右侧：极客监控磁贴 (Geek Dashboard Tiling) ──
+        
+        # A. AI 算力监控卡片
+        self._ai_tile = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Icon(ft.icons.AUTO_AWESOME_MOTION, color=COLOR_ZEN_PRIMARY, size=20),
+                    ft.Text("AI 算力分布", size=14, weight=ft.FontWeight.BOLD, color=COLOR_ZEN_TEXT_MAIN),
+                ]),
+                ft.Divider(height=1, color="#11FFFFFF"),
+                ft.Container(height=5),
+                self._quota_label,
+                ft.Text("在线智能体检引擎已就绪", size=11, color=COLOR_ZEN_TEXT_DIM),
+            ], spacing=10),
+            padding=15,
+            bgcolor="#1A1D24",
+            border_radius=12,
+            border=ft.border.all(1, "#11FFFFFF"),
             expand=True,
-            alignment=ft.alignment.center, # 整体垂直居中
+            shadow=ft.BoxShadow(blur_radius=15, color="#0A000000")
+        )
+
+        # B. 系统健康度展示
+        health_score = int(free_gb / total_gb * 100) if total_gb > 0 else 100
+        health_color = "#2ECC71" if health_score > 30 else "#E67E22" if health_score > 10 else "#E74C3C"
+        
+        self._health_tile = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Icon(ft.icons.HEALTH_AND_SAFETY, color=health_color, size=20),
+                    ft.Text("系统健康指数", size=14, weight=ft.FontWeight.BOLD, color=COLOR_ZEN_TEXT_MAIN),
+                ]),
+                ft.Divider(height=1, color="#11FFFFFF"),
+                ft.Container(height=5, expand=True),
+                ft.Row([
+                    ft.Text(f"{health_score}", size=36, weight=ft.FontWeight.W_900, color=health_color),
+                    ft.Text("%", size=16, color=health_color, weight=ft.FontWeight.BOLD),
+                ], alignment=ft.MainAxisAlignment.CENTER),
+                ft.Text("建议定期进行深度扫描", size=11, color=COLOR_ZEN_TEXT_DIM, text_align=ft.TextAlign.CENTER),
+                ft.Container(height=5),
+            ], spacing=5, alignment=ft.MainAxisAlignment.CENTER),
+            padding=15,
+            bgcolor="#1A1D24",
+            border_radius=12,
+            border=ft.border.all(1, "#11FFFFFF"),
+            expand=True,
+        )
+
+        # C. 核心任务磁贴 (集成开始扫描按钮)
+        self._action_tile = ft.Container(
+            content=ft.Column([
+                ft.Text("禅清数据控制中心", size=24, weight=ft.FontWeight.W_800, color=COLOR_ZEN_TEXT_MAIN),
+                ft.Text("通过本地 Rule Engine 与双重粉碎法释放空间", color=COLOR_ZEN_TEXT_DIM, size=12),
+                ft.Container(height=15),
+                self._scan_btn,
+                ft.Container(height=10),
+                ft.Text("预计扫查耗时 1.8s · 深度提权模式已开启", size=11, color="#6B7280"),
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            padding=20,
+            expand=2,
+            alignment=ft.alignment.center,
+        )
+
+        # 组合极客大屏布局
+        self._idle_execution = ft.Container(
+            content=ft.Column([
+                self._action_tile,
+                ft.Row([self._ai_tile, self._health_tile], spacing=15, expand=True),
+            ], spacing=15, expand=True),
+            expand=True,
         )
         
         # 右侧：引擎执行区 - 扫描态 (Active) SaaS 控制台化布局
@@ -181,7 +239,7 @@ class ScanView(ft.Column):
                 [
                     ft.Row([
                         ft.ProgressRing(width=24, height=24, stroke_width=3, color=COLOR_ZEN_PRIMARY),
-                        ft.Text("智能体检引擎运行中...", size=20, weight=ft.FontWeight.W_800, color=COLOR_ZEN_TEXT_MAIN),
+                        ft.Text("正在执行指令集: 深度扫描中...", size=20, weight=ft.FontWeight.W_800, color=COLOR_ZEN_TEXT_MAIN),
                     ], alignment=ft.MainAxisAlignment.START),
                     ft.Container(height=20),
                     self._counter_text,
@@ -219,8 +277,8 @@ class ScanView(ft.Column):
         self._main_dashboard = ft.Container(
             content=ft.Row(
                 [
-                    _analytics_panel,
-                    ft.VerticalDivider(width=1, color=COLOR_ZEN_BG),
+                    _glow_donut,
+                    ft.VerticalDivider(width=1, color="#11FFFFFF"), # 磨砂分割线
                     _execution_panel_wrapper
                 ],
                 expand=True,
@@ -235,45 +293,6 @@ class ScanView(ft.Column):
             ],
             expand=True,
         )
-
-        _analytics_panel = ft.Container(
-            content=ft.Stack([
-                _donut_chart,
-                ft.Container(
-                    content=ft.Column([
-                        ft.Text(f"{free_gb:.1f} GB", size=32, weight=ft.FontWeight.BOLD, color=COLOR_ZEN_PRIMARY, font_family="Consolas"),
-                        ft.Text("可用空间", size=13, color=COLOR_ZEN_TEXT_DIM),
-                        ft.Container(height=5),
-                        ft.Text(f"总容量 {total_gb:.1f} GB", size=11, color="#6B7280", font_family="Consolas"),
-                    ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=0),
-                    alignment=ft.alignment.center,
-                ),
-            ]),
-            expand=4, # 占位比重 4
-            padding=20,
-        )
-
-        # 右侧：引擎执行区 (Execution Panel)
-        _execution_panel = ft.Container(
-            content=ft.Column(
-                [
-                    ft.Text("系统深度体检", size=32, weight=ft.FontWeight.W_800, color=COLOR_ZEN_TEXT_MAIN),
-                    ft.Text("通过本地 Rule Engine 与双重粉碎法，安全释放您的磁盘空间", color=COLOR_ZEN_TEXT_DIM, size=13),
-                    ft.Container(height=30),
-                    self._quota_label,
-                    self._scan_btn,
-                    ft.Container(height=10),
-                    ft.Text("基于本地 Rule Engine · 预计扫查耗时 1.8s", size=11, color="#6B7280"),
-                ],
-                alignment=ft.MainAxisAlignment.CENTER,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=10,
-            ),
-            expand=6, # 占位比重 6
-            padding=20,
-        )
-
-        # 旧的 self._idle_panel 已被上方新的 _main_dashboard 顶替，这里清理掉残留代码。
 
     # ── 扫描启动 ──────────────────────────────────────────────────────────────
 
