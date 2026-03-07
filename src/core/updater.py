@@ -31,14 +31,17 @@ def check_for_updates(on_result, manual=False):
                             elif manual:
                                 on_result(False, APP_VERSION, "", "恭喜，当前已是最新版本。")
                                 return
+                    else:
+                        logger.info(f"[Updater] Backend API returned status: {res.status_code}")
                 except Exception as e:
-                    logger.warning(f"[Updater] Backend API check failed: {e}")
+                    logger.warning(f"[Updater] Backend API check failed (ignore if not deployed): {e}")
 
             # 降级：如果商业网关未配置或失败，尝试 GitHub Release
             if UPDATE_CHECK_URL:
                 logger.info(f"[Updater] Fallback checking GitHub: {UPDATE_CHECK_URL}")
+                headers = {'User-Agent': f'ZenClean-Client/{APP_VERSION}'}
                 try:
-                    res = requests.get(UPDATE_CHECK_URL, timeout=8) # 稍微增加超时容忍度
+                    res = requests.get(UPDATE_CHECK_URL, timeout=8, headers=headers)
                     if res.status_code == 200:
                         data = res.json()
                         latest_version = data.get("tag_name", "").lstrip("v")
@@ -58,12 +61,14 @@ def check_for_updates(on_result, manual=False):
                         if manual:
                             on_result(False, APP_VERSION, "", "云端尚未发布新版本，当前已是最新。")
                             return
+                    else:
+                        logger.warning(f"[Updater] GitHub Mirror returned status: {res.status_code}")
                 except Exception as e:
-                    logger.warning(f"[Updater] GitHub API check failed: {e}")
+                    logger.warning(f"[Updater] GitHub API check failed (Target Mirror/URL issue): {e}")
 
             # 如果走到这里还没 return，说明要么没配置地址，要么全部失败
             if manual:
-                on_result(False, APP_VERSION, "", "无法连接到更新服务器，请检查您的网络环境或稍后再试。")
+                on_result(False, APP_VERSION, "", "检测完成：云端暂无更新可用，或因网络波动无法连接国内加速节点。")
         except Exception as e:
             logger.error(f"[Updater] Uncaught error in _check: {e}")
             if manual:

@@ -176,8 +176,8 @@ WINDOW_HEIGHT = 680
 
 # ── 版本更新检查 ───────────────────────────────────────────────────────────────
 # 留空则跳过更新检查（CI/离线环境使用）
-# 国内可使用镜像加速获取 API: https://gh-api.99988866.xyz/repos/hwdemtv/ZenClean/releases/latest
-UPDATE_CHECK_URL = "https://gh-api.99988866.xyz/repos/hwdemtv/ZenClean/releases/latest"
+# 国内可使用镜像加速获取 API: https://api.kkgithub.com/repos/hwdemtv/ZenClean/releases/latest
+UPDATE_CHECK_URL = "https://api.kkgithub.com/repos/hwdemtv/ZenClean/releases/latest"
 
 # 默认官方国内下载源（避开 GitHub Releases 的强壁垒）
 FALLBACK_DOWNLOAD_URL = "https://pan.quark.cn/s/ebbf7993cf2f"
