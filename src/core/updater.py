@@ -36,12 +36,21 @@ def check_for_updates(on_result, manual=False):
                 except Exception as e:
                     logger.warning(f"[Updater] Backend API check failed (ignore if not deployed): {e}")
 
-            # 降级：如果商业网关未配置或失败，尝试 GitHub Release
-            if UPDATE_CHECK_URL:
-                logger.info(f"[Updater] Fallback checking GitHub: {UPDATE_CHECK_URL}")
-                headers = {'User-Agent': f'ZenClean-Client/{APP_VERSION}'}
+            # 降级：如果商业网关未配置或失败，尝试多重镜像轮询 (GitHub Release)
+            # 定义国内高质量镜像列表，按稳定性排序
+            MIRRORS = [
+                "https://api.kkgithub.com/repos/hwdemtv/ZenClean/releases/latest",
+                "https://gh-api.99988866.xyz/repos/hwdemtv/ZenClean/releases/latest",
+                "https://ghapi.paniy.xyz/repos/hwdemtv/ZenClean/releases/latest",
+                "https://api.github.com/repos/hwdemtv/ZenClean/releases/latest" # 官方兜底
+            ]
+            
+            headers = {'User-Agent': f'ZenClean-Client/{APP_VERSION}'}
+            for mirror_url in MIRRORS:
                 try:
-                    res = requests.get(UPDATE_CHECK_URL, timeout=8, headers=headers)
+                    logger.info(f"[Updater] Checking mirror: {mirror_url}")
+                    res = requests.get(mirror_url, timeout=6, headers=headers)
+                    
                     if res.status_code == 200:
                         data = res.json()
                         latest_version = data.get("tag_name", "").lstrip("v")
@@ -54,21 +63,22 @@ def check_for_updates(on_result, manual=False):
                             on_result(True, latest_version, html_url, body)
                             return
                         elif manual:
-                            on_result(False, APP_VERSION, "", "通过云端检索，当前已是最新版本。")
+                            on_result(False, APP_VERSION, "", "恭喜，当前已是最新版本。")
                             return
                     elif res.status_code == 404:
-                        logger.info("[Updater] GitHub Release not found (404). Assuming no updates.")
+                        logger.info(f"[Updater] 404 on {mirror_url}, repo may have no releases.")
                         if manual:
                             on_result(False, APP_VERSION, "", "云端尚未发布新版本，当前已是最新。")
                             return
                     else:
-                        logger.warning(f"[Updater] GitHub Mirror returned status: {res.status_code}")
+                        logger.warning(f"[Updater] Mirror {mirror_url} returned {res.status_code}")
                 except Exception as e:
-                    logger.warning(f"[Updater] GitHub API check failed (Target Mirror/URL issue): {e}")
+                    logger.warning(f"[Updater] Mirror {mirror_url} failed: {e}")
+                    continue # 尝试下一个镜像
 
             # 如果走到这里还没 return，说明要么没配置地址，要么全部失败
             if manual:
-                on_result(False, APP_VERSION, "", "检测完成：云端暂无更新可用，或因网络波动无法连接国内加速节点。")
+                on_result(False, APP_VERSION, "", "版本检测链路波动，请稍后再试（您可以直接访问官网或网盘查看）。")
         except Exception as e:
             logger.error(f"[Updater] Uncaught error in _check: {e}")
             if manual:

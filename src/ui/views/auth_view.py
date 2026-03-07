@@ -88,68 +88,64 @@ class AuthView(ft.Column):
                     lease_dt = datetime.strptime(self.app.lease_expiry_date, "%Y-%m-%d %H:%M")
                     days_left = (lease_dt - datetime.now()).days
                     if days_left < 3:
-                        expiry_infos.extend([
-                            ft.Row([
-                                ft.Text("离线许可至：", color=COLOR_ZEN_TEXT_DIM, size=14),
-                                ft.Text(f"{self.app.lease_expiry_date}", color=COLOR_ZEN_GOLD),
-                            ], alignment=ft.MainAxisAlignment.CENTER),
-                            ft.Text("(离线期满前联网运行一次即可自动续期)", color=COLOR_ZEN_TEXT_DIM, size=12, italic=True)
-                        ])
+                        expiry_infos.append(
+                            ft.Text(f"(离线许可至：{self.app.lease_expiry_date})", color=COLOR_ZEN_TEXT_DIM, size=11, italic=True)
+                        )
                 except Exception:
                     pass
-
+ 
             content_col = ft.Container(
                 content=ft.Column([
                     ft.Container(
                         content=ft.Image(
                             src=os.path.join(self.app.page.client_storage.get("assets_dir") or "", "icon.png"), 
-                            width=80, height=80, fit=ft.ImageFit.CONTAIN
+                            width=60, height=60, fit=ft.ImageFit.CONTAIN
                         ),
-                        width=110, height=110,
-                        border_radius=55,
+                        width=90, height=90,
+                        border_radius=45,
                         bgcolor="#2A2F3A",
                         alignment=ft.alignment.center,
-                        margin=ft.margin.only(bottom=10),
+                        margin=ft.margin.only(bottom=5),
                     ),
-                    ft.Text("尊贵的 VIP 状态已激活", size=24, weight=ft.FontWeight.BOLD, color=COLOR_ZEN_GOLD),
+                    ft.Text("尊贵的 VIP 状态已激活", size=22, weight=ft.FontWeight.BOLD, color=COLOR_ZEN_GOLD),
                     
                     ft.Container(
-                        content=ft.Column(expiry_infos, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=5, tight=True),
-                        padding=15,
+                        content=ft.Column(expiry_infos, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2, tight=True),
+                        padding=10,
                     ),
-
-                    ft.Text("您已解锁全天候本地 AI 深层扫查与强力清除功能。", color=COLOR_ZEN_TEXT_DIM),
+ 
+                    ft.Text("您已解锁全天候本地 AI 深层扫查与强力清除功能。", color=COLOR_ZEN_TEXT_DIM, size=13),
                     
                     ft.Container(
                         content=ft.Row([
-                            ft.Icon(ft.icons.BOLT, color=COLOR_ZEN_PRIMARY, size=20),
+                            ft.Icon(ft.icons.BOLT, color=COLOR_ZEN_PRIMARY, size=18),
                             self._quota_text,
                         ], alignment=ft.MainAxisAlignment.CENTER),
-                        margin=ft.margin.only(top=10, bottom=10),
+                        margin=ft.margin.only(top=5, bottom=5),
                     ),
-
-                    ft.Container(height=10),
+ 
                     ft.Container(
-                        content=ft.Text("开始体验纯净系统", color="white", weight=ft.FontWeight.BOLD, size=16),
+                        content=ft.Text("开始体验纯净系统", color="white", weight=ft.FontWeight.BOLD, size=15),
                         alignment=ft.alignment.center,
-                        width=300,
-                        height=45,
-                        border_radius=25,
+                        width=280,
+                        height=42,
+                        border_radius=21,
                         gradient=ft.LinearGradient(
                             begin=ft.alignment.top_left,
                             end=ft.alignment.bottom_right,
                             colors=["#1DD1A1", "#00C2FF"],
                         ),
-                        shadow=ft.BoxShadow(spread_radius=1, blur_radius=15, color="#401DD1A1"),
+                        shadow=ft.BoxShadow(spread_radius=1, blur_radius=12, color="#301DD1A1"),
                         ink=True,
                         on_click=lambda _: self.app.navigate_to("/scan")
                     ),
-                    ft.Text(f"当前版本: v{APP_VERSION} Beta", size=14, color=COLOR_ZEN_TEXT_DIM),
-                    ft.Container(height=10),
+                    ft.Text(f"当前版本: v{APP_VERSION} Beta", size=13, color=COLOR_ZEN_TEXT_DIM),
+                    ft.Container(height=5),
                     ft.ElevatedButton(
                         text="检查更新",
                         icon=ft.icons.SYSTEM_UPDATE_ALT,
                         on_click=self._on_check_update_click,
+                        height=35,
                         style=ft.ButtonStyle(
                             color=COLOR_ZEN_GOLD,
                             bgcolor=ft.colors.TRANSPARENT,
@@ -158,8 +154,8 @@ class AuthView(ft.Column):
                         )
                     )
                 ], spacing=2, alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, tight=True),
-                padding=30,
-                width=550,
+                padding=20,
+                width=520,
                 border=ft.border.all(1, COLOR_ZEN_GOLD),
                 border_radius=12,
                 bgcolor="#202226"
