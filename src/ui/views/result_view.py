@@ -356,15 +356,58 @@ class ResultView(ft.Column):
         self.app.page.run_task(self._async_run_clean, nodes_to_clean)
 
     async def _async_run_clean(self, nodes_to_clean):
-        """在独立线程池中执行耗时的物理清理，避免阻塞主线程动画帧"""
+        """在独立线程池中执行耗时的物理清理，并实时驱动 UI 动效"""
         import asyncio
+        import time
         from core.cleaner import clean
 
-        # 1. 调用核心引擎（在独立线程执行）
-        result = await asyncio.to_thread(clean, nodes_to_clean, force_high=True)
+        total_nodes = len(nodes_to_clean)
+        processed_count = 0
+        rem_size = self._total_size_bytes
+
+        # ── 方案一：实时数值播报回调 ──────────────────────────────────────────
+        last_update_ts = 0
+        def _on_progress(path, action, total_freed):
+            nonlocal processed_count, rem_size, last_update_ts
+            processed_count += 1
+            
+            # 节流：每 50ms 最多更新一次 UI，避免海量小文件导致 Flet 渲染阻塞
+            now = time.time()
+            if now - last_update_ts > 0.05 or processed_count == total_nodes:
+                if self.app.page:
+                    self.btn_clean.text = f"正在物理粉碎: {processed_count} / {total_nodes} 项..."
+                    self.app.page.update()
+                last_update_ts = now
+
+        # ── 方案三：右上角红字平滑倒吸动效 ────────────────────────────────────
+        async def _animate_size_countdown():
+            nonlocal rem_size
+            start_size = self._total_size_bytes
+            steps = 60 # 动画帧数
+            for i in range(steps + 1):
+                if not self.is_confirm_mode: break # 防止意外中断
+                progress = i / steps
+                # 减速曲线，让归零更有“吸入感”
+                ease = 1 - pow(1 - progress, 4) 
+                curr_viz_size = start_size * (1 - ease)
+                self.lbl_total_size.value = f"待清理: {_fmt_size(int(curr_viz_size))}"
+                if self.app.page:
+                    self.app.page.update()
+                await asyncio.sleep(0.01)
+
+        # 启动倒吸动画（协程运行）
+        self.app.page.run_task(_animate_size_countdown)
+
+        # 执行核心清理（线程池执行，带进度回调）
+        result = await asyncio.to_thread(clean, nodes_to_clean, on_progress=_on_progress, force_high=True)
 
         # 2. 清理完成后，切回主线程更新 UI
         if self.app.page:
+            # 确保最终显示为 0
+            self.lbl_total_size.value = "待清理: 0.00 B"
+            self.btn_clean.text = "清理圆满完成"
+            self.btn_clean.bgcolor = ft.colors.GREEN_700
+            
             # 汇总通知
             msg = f"清理完毕！物理删除 {result.deleted} 项，移入回收站 {result.trashed} 项。"
             if result.freed_bytes > 0:
