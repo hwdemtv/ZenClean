@@ -1,7 +1,8 @@
 import threading
 import requests
 import json
-from config.settings import UPDATE_CHECK_URL, APP_VERSION, LICENSE_SERVER_URLS, FALLBACK_DOWNLOAD_URL
+from config.settings import UPDATE_CHECK_URL, LICENSE_SERVER_URLS, FALLBACK_DOWNLOAD_URL
+from config.version import __version__ as APP_VERSION
 from core.logger import logger
 
 def check_for_updates(on_result, manual=False):
