@@ -273,13 +273,22 @@ class ZenCleanApp(ft.Column):
                 self.page.overlay.append(dlg)
                 dlg.open = True
             else:
+                # 轻提醒：横幅 SnackBar，增强对比度
                 self.page.snack_bar = ft.SnackBar(
                     content=ft.Row([
-                        ft.Icon(ft.icons.NOTIFICATIONS, color=COLOR_ZEN_PRIMARY),
-                        ft.Text(f"{title}: {content[:40]}...", size=13),
-                        ft.TextButton("去看看", on_click=lambda _: self.page.launch_url(url)) if url else ft.Container()
-                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                    bgcolor="#1A1C22", duration=10000
+                        ft.Icon(ft.icons.NOTIFICATIONS, color=COLOR_ZEN_PRIMARY, size=20),
+                        ft.Text(f"{title}: ", size=13, weight=ft.FontWeight.BOLD, color=ft.colors.WHITE),
+                        ft.VerticalDivider(width=1, color=ft.colors.WHITE24),
+                        ft.Text(f"{content[:50]}...", size=13, color=ft.colors.WHITE),
+                        ft.TextButton("去看看", 
+                            style=ft.ButtonStyle(color=COLOR_ZEN_PRIMARY),
+                            on_click=lambda _: self.page.launch_url(url)
+                        ) if url else ft.Container()
+                    ], alignment=ft.MainAxisAlignment.START, spacing=10),
+                    bgcolor="#2D323E", # 提升背景亮度以产生色差
+                    duration=10000,
+                    behavior=ft.SnackBarBehavior.FLOATING,
+                    margin=ft.margin.only(bottom=20, left=20, right=20)
                 )
                 self.page.snack_bar.open = True
             
