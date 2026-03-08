@@ -69,7 +69,7 @@
 
 ---
 ## 🚀 极速上手
-1. 下载并解压 `ZenClean_0.1.1_Beta.zip`。
+1. 下载并解压 `ZenClean_0.x.x_Beta.zip`。
 2. **双击运行 `ZenClean.exe`**。
 3. 若提示“缺少运行库”，按引导完成 Visual C++ 安装。
 

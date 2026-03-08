@@ -59,47 +59,19 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    # ── 关键 1: 必须放在所有逻辑(包含 UAC 提权前)的最开头 ────────────────────
+    # ── 关键 1: 必须放在所有逻辑的最前面 ────────────────────
     # 否则 PyInstaller 打包后的子进程也会疯狂弹出 UAC 提权
     import multiprocessing
     multiprocessing.freeze_support()
 
     import ctypes
-
-
-    # ── VC++ 运行库检测逻辑 ───────────────────────────────────────────────
-    def check_vcpp_redist():
-        try:
-            # 尝试加载关键的 C++ 运行库，缺失会抛出 OSError
-            ctypes.WinDLL("vcruntime140.dll")
-            ctypes.WinDLL("msvcp140.dll")
-            return True
-        except OSError:
-            return False
-
-    def show_vcpp_error_and_exit():
-        msg = (
-            "ZenClean 启动失败：系统缺少必要的 Visual C++ 运行库组件。\n\n"
-            "是否立即打开浏览器前往微软官网下载安装程序？\n\n"
-            "（提示：安装完成后无需重启，即可正常使用。下个版本我们将支持全自动静默修复。）"
-        )
-        # 0x00000004 = MB_YESNO, 0x00000020 = MB_ICONQUESTION
-        result = ctypes.windll.user32.MessageBoxW(0, msg, "ZenClean - 缺少运行库", 0x00000004 | 0x00000020)
-        
-        if result == 6:  # 6 = IDYES
-            import webbrowser
-            webbrowser.open("https://aka.ms/vs/17/release/vc_redist.x64.exe")
-        
-        sys.exit(1)
-
-    if not check_vcpp_redist():
-        show_vcpp_error_and_exit()
+    import sys
 
     # ── UAC 自动提权逻辑 ──────────────────────────────────────────────────
     def is_admin():
         try:
             return ctypes.windll.shell32.IsUserAnAdmin()
-        except:
+        except Exception:
             return False
 
     if not is_admin():
@@ -121,46 +93,64 @@ if __name__ == "__main__":
             ret = ctypes.windll.shell32.ShellExecuteW(
                 None, "runas", target_cmd, params, None, 1
             )
+            # return code > 32 意味着提权且进程启动成功
             if int(ret) > 32:
-                # 提权并且拉起成功，退出当前非管理员进程
-                sys.exit(0)
+                sys.exit(0)  # 父进程（低权）功成身退
             else:
-                # 用户可能点击了“取消”或者提权失败
-                from core.logger import logger
-                logger.warning(f"UAC Elevation declined or failed. Return code: {ret}")
-                
-                # 弹窗提示用户，争取二次确认
+                # 提权被用户拒绝 (User Cancelled) 或发生错误
                 msg = (
-                    "ZenClean 需要管理员权限才能：\n"
-                    "1. 扫描 Windows 更新等受限系统目录\n"
-                    "2. 深度释放 16GB+ 的系统休眠文件\n"
-                    "3. 拦截高危的 AI 本地误删操作\n\n"
-                    "是否重新尝试提权？（选择‘否’将以标准版运行，清理深度受限）"
+                    "ZenClean 未获取管理员权限。\n\n"
+                    "您可以继续在普通模式下运行，基础检查不受影响，但【深度系统休眠瘦身】与【C 盘核心系统区扫描】等高阶指令将无法执行。\n\n"
+                    "是否继续以受限模式启动？"
                 )
-                # 0x00000004 = MB_YESNO, 0x00000030 = MB_ICONWARNING
-                res = ctypes.windll.user32.MessageBoxW(0, msg, "ZenClean - 权限提醒", 0x00000004 | 0x00000030)
-                if res == 6: # IDYES
-                    # 递归尝试（这里直接 sys.executable 重跑即可）
-                    ctypes.windll.shell32.ShellExecuteW(None, "runas", target_cmd, params, None, 1)
-                    sys.exit(0)
-                else:
-                    logger.info("User chose to run in standard mode without UAC.")
+                # MB_ICONWARNING (0x30) | MB_YESNO (0x04) = 0x34
+                # YES (6), NO (7)
+                res = ctypes.windll.user32.MessageBoxW(0, msg, "ZenClean - 降权运行提示", 0x34)
+                if res != 6:
+                    sys.exit(0) # 用户选择不继续，安静退出
         except Exception as e:
-            from core.logger import logger
-            logger.error(f"Error during UAC elevation: {e}")
-            # 如果取消了 UAC 或报错，目前选择继续以普通权限运行
+            # 异常情况，同理降级运行
+            pass
+
+    # ── 0. 瞬间关闭 PyInstaller 启动闪屏 ──────────────────────────────────────
+    # 必须在确定当前进程（无论是刚拉起的高权，还是降级的低权）是主执行进程时才关闭 splash
+    try:
+        import pyi_splash
+        pyi_splash.close()
+    except Exception:
+        pass
+
+    # ── VC++ 运行库检测逻辑 ───────────────────────────────────────────────
+    def check_vcpp_redist():
+        try:
+            ctypes.WinDLL("vcruntime140.dll")
+            ctypes.WinDLL("msvcp140.dll")
+            return True
+        except OSError:
+            return False
+
+    if not check_vcpp_redist():
+        msg = (
+            "ZenClean 启动失败：系统缺少必要的 Visual C++ 运行库组件。\n\n"
+            "是否立即打开浏览器前往微软官网下载安装程序？"
+        )
+        result = ctypes.windll.user32.MessageBoxW(0, msg, "ZenClean - 缺少运行库", 0x00000004 | 0x00000020)
+        if result == 6:
+            import webbrowser
+            webbrowser.open("https://aka.ms/vs/17/release/vc_redist.x64.exe")
+        sys.exit(1)
 
     # ── 进程退出清理机制 ───────────────────────────────────────────────────
     import atexit
     def cleanup_on_exit():
-        # 释放所有后台扫描子进程
         try:
             from multiprocessing import active_children
             for child in active_children():
                 child.terminate()
-        except:
+        except Exception:
             pass
     atexit.register(cleanup_on_exit)
 
+    # 正式拉起应用
     ft.app(target=main, assets_dir=_ASSETS_DIR)
 
