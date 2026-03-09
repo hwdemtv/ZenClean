@@ -2,16 +2,17 @@
 ZenClean 双重分诊清理引擎
 
 执行逻辑（双重分诊策略）：
-    LOW    → pathlib.Path.unlink() 物理删除，即时释放 C 盘
-    MEDIUM → send2trash 移入回收站，保留后悔药
-    HIGH   → 仅在调用方明确传入 force=True 时才执行 send2trash（UI 二次确认后调用）
+    LOW    → pathlib.Path.unlink() 物理删除，即时释放本地空间（仅针对于 100% 确认无害的系统级 tmp，其它全部拦截）
+    MEDIUM → quarantine() 移入 ZenClean 物理隔离沙箱，保留 72 小时后悔药
+    HIGH   → 仅在调用方明确传入 force=True 时才执行 quarantine()（UI 二次确认后）
     CRISIS → 程序级硬拒绝，写 WARNING 日志，不执行任何操作
     UNKNOWN→ 跳过，写 DEBUG 日志
 
 安全闭环：
-    1. 每次删除前再次调用 whitelist.assert_safe()，即使 AI 判断有误也能兜底
-    2. 全程用 structlog 记录每条操作（路径、大小、策略、结果）
-    3. 统计实际释放字节数，供 UI 动画回调使用
+    1. 每次清理前再次调用 whitelist.assert_safe()，即使 AI 判断有误也能兜底
+    2. 使用隔离沙箱机制，大幅降低三方应用被误判导致的服务瘫痪客诉率
+    3. 全程用 structlog 记录每条操作（路径、大小、策略、结果）
+    4. 统计实际释放/隔离字节数，供 UI 动画回调使用
 
 公开 API：
     result = clean(nodes, on_progress=cb, force_high=False)
@@ -24,8 +25,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-import send2trash
 from core import whitelist
+from core.quarantine import quarantine
 from core.logger import logger
 
 
@@ -111,7 +112,7 @@ def clean(
             action = "skipped"
 
         if on_progress:
-            on_progress(path, action, result.freed_bytes)
+            on_progress(path, action, result.total_bytes)
 
     logger.info(
         f"clean_complete: deleted={result.deleted}, trashed={result.trashed}, "
@@ -154,11 +155,12 @@ def _physical_delete(path: str, size: int, result: CleanResult) -> str:
         return "failed"
 
 
-# ── 移入回收站（MEDIUM / HIGH force） ────────────────────────────────────────
+# ── 移入隔离沙箱（MEDIUM / HIGH force） ────────────────────────────────────────
 
 def _trash(path: str, size: int, result: CleanResult) -> str:
     """
-    对 MEDIUM/HIGH(force) 级别路径调用 send2trash 移入系统回收站。
+    对 MEDIUM/HIGH(force) 级别路径调用 quarantine 移入禅清隔离沙箱。
+    提供 72 小时的反悔和容灾能力。
     """
     p = Path(path)
     if not p.exists():
@@ -168,16 +170,21 @@ def _trash(path: str, size: int, result: CleanResult) -> str:
 
     try:
         actual_size = (_dir_size(p) if p.is_dir() else size or _safe_size(p))
-        send2trash.send2trash(str(p))
-        result.trashed += 1
-        result.trashed_bytes += actual_size
-        logger.info(f"trashed: path={path}, bytes={actual_size}")
-        return "trashed"
+        success = quarantine(str(p), actual_size)
+        if success:
+            result.trashed += 1
+            result.trashed_bytes += actual_size
+            logger.info(f"quarantined: path={path}, bytes={actual_size}")
+            return "trashed"
+        else:
+            result.failed += 1
+            result.errors.append(f"QUARANTINE_FAILED {path}")
+            return "failed"
 
-    except Exception as exc:  # send2trash 可能抛出非 OSError
+    except Exception as exc:
         result.failed += 1
-        result.errors.append(f"TRASH {path}: {exc}")
-        logger.error(f"trash_failed: path={path}, error={exc}")
+        result.errors.append(f"QUARANTINE_EXCEPTION {path}: {exc}")
+        logger.error(f"quarantine_failed: path={path}, error={exc}")
         return "failed"
 
 

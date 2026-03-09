@@ -161,12 +161,12 @@ def verify_license_online(license_key: str, is_auto_check: bool = False) -> tupl
                         return False, f"[REVOKED] {last_error_msg}", notification
                 except Exception:
                     last_error_msg = f"服务端异常: {res.status_code} ({res.text[:100]})"
-                logger.warning(f"Server {url} returned {res.status_code}: {res.text}")
+                logger.warning(f"授权服务端返回 {res.status_code}")
         except requests.RequestException as e:
             # 对用户提示屏蔽具体域名，仅保留错误类型；完整细节写入日志便于排查
             error_detail = f"{type(e).__name__}: {str(e)[:100]}"
             connection_errors.append(error_detail)
-            logger.warning(f"Failed to connect to license server {url}: {e}")
+            logger.warning(f"授权服务器连接失败: {type(e).__name__}")
             continue
 
     # 增强错误消息，包含诊断信息（但不暴露具体域名）

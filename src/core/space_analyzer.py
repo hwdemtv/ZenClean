@@ -63,8 +63,8 @@ def stream_top_folders(roots: list[str], top_n: int = 20):
     """
     scanned_paths = set()
     
-    # 优先级排序：先扫用户数据区，再扫根目录
-    roots.sort(key=lambda r: ("%USERPROFILE%" in r or "%LOCALAPPDATA%" in r), reverse=True)
+    # 优先级排序：首先扫描最短的根目录路径（如 C:\），确保大的分级目录（Users, ProgramData）最先被捕获
+    roots.sort(key=lambda r: len(os.path.expandvars(r)))
 
     for root_str in roots:
         expanded_root = os.path.expandvars(root_str)

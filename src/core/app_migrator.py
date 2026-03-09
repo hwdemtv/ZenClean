@@ -180,27 +180,36 @@ class AppMigrator:
         # 使用递归复制而非重命名，原因：源与目标通常跨越不同的驱动器
         # shutil.move 本身在跨盘时会 fallback 成 copy2 + rmtree
         try:
-            # TODO: 加入 Cancellation_token 的支持
-            for item in os.listdir(src_path):
-                s = src_path / item
-                d = dest_base / item
+            items = os.listdir(src_path)
+        except Exception as e:
+            logger.error(f"Failed to list directory {src_path}: {e}")
+            return False, f"无法读取源目录，请检查权限: {e}"
+
+        # TODO: 加入 Cancellation_token 的支持
+        for item in items:
+            s = src_path / item
+            d = dest_base / item
+            
+            # 通知 UI 当前进展
+            if on_progress:
+                on_progress(moved_size, total_size, item)
                 
-                # 通知 UI 当前进展
-                if on_progress:
-                    on_progress(moved_size, total_size, item)
-                    
+            try:
+                # 安全包裹状态读取与移动操作，避免遇到独占或无权限节点闪退
                 if s.is_dir():
                     shutil.move(str(s), str(d))
                 else:
                     shutil.move(str(s), str(d))
-                    
-                # 简单累加估算，提高性能不深算
-                moved_size += s.stat().st_size if s.exists() and s.is_file() else 0
                 
-        except Exception as e:
-            logger.error(f"Migration file movement failed: {e}")
-            # [致命断崖点预防]: 如果发生崩溃，不要立即摧毁源目录，原位留存剩余，目标目录残留拷贝件
-            return False, f"文件搬迁非预期中止，可能软件尚未完全退出占用: {e}"
+                # 简单累加估算，提高性能不深算
+                try:
+                    moved_size += d.stat().st_size if d.exists() and d.is_file() else 0
+                except Exception:
+                    pass
+            except Exception as e:
+                logger.warning(f"Skipping unmovable item {s}: {e}")
+                # 忽略单个无法移动的问题文件，继续尽力搬运其他文件
+                continue
 
         # ── 3. 删空源目录并创建 Junction ──
         try:
@@ -260,12 +269,18 @@ class AppMigrator:
              
         # ── 2. 回迁真实文件 ──
         try:
-            for item in os.listdir(real_dest_path):
-                s = real_dest_path / item
-                d = src_path / item
-                shutil.move(str(s), str(d))
+            items = os.listdir(real_dest_path)
         except Exception as e:
-            return False, f"数据回迁 C 盘时遇到故障: {e}"
+             return False, f"无法读取目标目录列队: {e}"
+             
+        for item in items:
+            s = real_dest_path / item
+            d = src_path / item
+            try:
+                shutil.move(str(s), str(d))
+            except Exception as e:
+                logger.warning(f"Failed to restore item {s}: {e}")
+                continue
             
         # ── 3. 清理废弃源和历史 ──
         try:

@@ -186,32 +186,58 @@ def _merge_move(src: Path, dst: Path,
     on_file(filepath, size) 在每个文件移动完成后回调。
     cancel_event.is_set() 为 True 时提前终止。
     """
-    dst.mkdir(parents=True, exist_ok=True)
+    try:
+        dst.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
 
-    for entry in os.scandir(src):
+    try:
+        entries = list(os.scandir(src))
+    except (OSError, PermissionError):
+        # 若遇无权限目录（如被系统拒绝保护的目录），静默跳过
+        return
+
+    for entry in entries:
         if cancel_event.is_set():
             return
 
         src_item = Path(entry.path)
         dst_item = dst / entry.name
 
-        if entry.is_dir(follow_symlinks=False):
+        # 跳过重解析点（Junction Points / Symlinks，如 My Music, My Pictures）
+        # 避免递归死循环或引发由于系统严格控制而导致的拒绝访问错误
+        try:
+            attrs = entry.stat(follow_symlinks=False).st_file_attributes
+            if attrs & 0x400:  # 0x400 = FILE_ATTRIBUTE_REPARSE_POINT
+                continue
+                
+            is_dir = entry.is_dir(follow_symlinks=False)
+        except (OSError, PermissionError):
+            # 将无权访问的系统受保护节点直接跳过，避免引发崩溃
+            on_file(str(src_item), 0)
+            continue
+
+        if is_dir:
             _merge_move(src_item, dst_item, on_file, cancel_event)
             # 子目录内容全部移走后删除空壳
             try:
                 if not any(src_item.iterdir()):
                     src_item.rmdir()
-            except OSError:
+            except (OSError, PermissionError):
                 pass
         else:
             size = 0
             try:
                 size = entry.stat(follow_symlinks=False).st_size
-            except OSError:
+            except (OSError, PermissionError):
                 pass
 
-            if dst_item.exists():
-                # merge：目标已存在同名文件，跳过（保留目标端版本）
+            try:
+                if dst_item.exists():
+                    # merge：目标已存在同名文件，跳过（保留目标端版本）
+                    on_file(str(src_item), 0)
+                    continue
+            except (OSError, PermissionError):
                 on_file(str(src_item), 0)
                 continue
 

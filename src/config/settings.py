@@ -156,16 +156,18 @@ AI_REQUEST_TIMEOUT = 8
 AI_CLIENT_RATE_LIMIT = 10
 AI_CLIENT_RATE_WINDOW = 60  # 秒
 
-# ── UI 主题 (商业级 SaaS 方案) ──────────────────────────────────────────────────
-COLOR_ZEN_BG = "#0F1115"          # 极光暗蓝 - 主背景
-COLOR_ZEN_SURFACE = "#171A21"     # 卡片层 - 用于区块划分
-COLOR_ZEN_PRIMARY = "#009688"     # 水墨青/玉石绿 - 沉稳内敛的核心色
-COLOR_ZEN_GOLD = "#D4AF37"        # 檀木金 - VIP/尊贵/品牌
-COLOR_ZEN_DANGER = "#E74C3C"      # 朱砂红 - 警告/删除/退出
-COLOR_ZEN_DIVIDER = "#11FFFFFF"   # 极低透明度白 - 无痕分割线
-COLOR_ZEN_TEXT_MAIN = "#E6EAF0"   # 星尘白 - 主标题文字
-COLOR_ZEN_TEXT_DIM = "#8B93A6"    # 冷峻灰 - 副标题文字
-COLOR_ZEN_WARNING = "#FFB020"     # 橙黄 - 配额提示/警告
+# ── UI 主题 (动态主题映射机制) ──────────────────────────────────────────────────
+# 此时不再硬编码 Hex 色值，而是使用 Flet 原生 Material 3 Theme 的变量名称。
+# 这使得软件可以在 "深色赛博护眼模式" 和 "浅色实验舱模式" 间丝滑切换，而不用动 UI 层代码。
+COLOR_ZEN_BG = "background"
+COLOR_ZEN_SURFACE = "surface"
+COLOR_ZEN_PRIMARY = "primary"
+COLOR_ZEN_GOLD = "secondary"
+COLOR_ZEN_DANGER = "error"
+COLOR_ZEN_DIVIDER = "outline"
+COLOR_ZEN_TEXT_MAIN = "onSurface"
+COLOR_ZEN_TEXT_DIM = "onSurfaceVariant"
+COLOR_ZEN_WARNING = "tertiary"
 
 # 兼容旧代码引用 (渐进式替换)
 THEME_BG_COLOR = COLOR_ZEN_BG

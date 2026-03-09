@@ -74,21 +74,37 @@ class ResultView(ft.Column):
             on_click=self._reset_selection,
         )
 
-        self.btn_clean = ft.ElevatedButton(
+        # ── 极光增强型一键清理按钮 ──
+        self._btn_clean_icon = ft.Icon(ft.icons.BACKSPACE_ROUNDED, color="white")
+        self._btn_clean_text = ft.Text(
             "智能体检一键清理" if app.is_activated else "🔑 VIP专享: 一键智能清除",
-            icon=ft.icons.BACKSPACE_ROUNDED,
-            color="white",
-            bgcolor=COLOR_ZEN_PRIMARY if app.is_activated else "#333333",
-            disabled=not app.is_activated,
+            color="white", weight=ft.FontWeight.BOLD
+        )
+
+        self.btn_clean = ft.Container(
+            content=ft.Row([self._btn_clean_icon, self._btn_clean_text], alignment=ft.MainAxisAlignment.CENTER),
             height=50,
             expand=True,
-            on_click=self._on_main_button_click,
+            border_radius=10,
+            gradient=ft.LinearGradient(
+                begin=ft.alignment.top_left,
+                end=ft.alignment.bottom_right,
+                colors=["#00B894", "#00C2FF"] if app.is_activated else ["#454545", "#333333"]
+            ),
+            border=ft.border.all(1, ft.colors.with_opacity(0.1, "onSurface")),
+            shadow=ft.BoxShadow(spread_radius=1, blur_radius=15, color=ft.colors.with_opacity(0.2, "#00B894") if app.is_activated else ft.colors.TRANSPARENT),
+            ink=True if app.is_activated else False,
+            on_click=self._on_main_button_click if app.is_activated else None,
+            opacity=1.0 if app.is_activated else 0.6
         )
 
         # 分组面板容器
         self.groups_col = ft.ListView(expand=True, spacing=8)
+        
+        # 进度反馈条 (清理过程专属)
+        self.clean_progress = ft.ProgressBar(width=None, value=0, color=COLOR_ZEN_PRIMARY, visible=False)
 
-        self.controls = [header, self.groups_col, ft.Row([self.btn_reset, self.btn_clean])]
+        self.controls = [header, self.groups_col, self.clean_progress, ft.Row([self.btn_reset, self.btn_clean])]
         self._build_data()  # 初始构建
 
     # ── 数据处理与 UI 渲染 ──────────────────────────────────────────────────
@@ -198,7 +214,7 @@ class ResultView(ft.Column):
                             on_click=lambda _, c=cat: self._collapse_group(c),
                         ),
                         padding=ft.padding.only(left=30, top=5, bottom=5),
-                        bgcolor="#2A2A2A",
+                        bgcolor="surfaceVariant",
                         border_radius=5,
                     ))
 
@@ -251,8 +267,8 @@ class ResultView(ft.Column):
                     controls=file_controls,
                     initially_expanded=cat in self._expanded_tile_keys,
                     on_change=_on_tile_change,
-                    bgcolor="#212121",
-                    collapsed_bgcolor="#1A1A1A",
+                    bgcolor="surface",
+                    collapsed_bgcolor="surfaceVariant",
                     shape=ft.RoundedRectangleBorder(radius=8),
                 )
             )
@@ -281,15 +297,21 @@ class ResultView(ft.Column):
         self.lbl_total_size.value = f"待清理: {_fmt_size(self._total_size_bytes)}"
         
         if not self.is_confirm_mode:
-            self.btn_clean.text = "智能体检一键清理"
-            self.btn_clean.bgcolor = COLOR_ZEN_PRIMARY
-            self.btn_clean.icon = ft.icons.AUTO_FIX_HIGH
+            self._btn_clean_text.value = "智能体检一键清理"
+            self.btn_clean.gradient = ft.LinearGradient(
+                begin=ft.alignment.top_left, end=ft.alignment.bottom_right,
+                colors=["#00B894", "#00C2FF"]
+            )
+            self._btn_clean_icon.name = ft.icons.AUTO_FIX_HIGH
             self.btn_reset.visible = False
         else:
             checked_count = sum(1 for n in self.app.scan_nodes if n.get("is_checked", False))
-            self.btn_clean.text = f"确认清理 {checked_count} 项 ({_fmt_size(self._total_size_bytes)})"
-            self.btn_clean.bgcolor = COLOR_ZEN_DANGER
-            self.btn_clean.icon = ft.icons.DELETE_FOREVER
+            self._btn_clean_text.value = f"确认清理 {checked_count} 项 ({_fmt_size(self._total_size_bytes)})"
+            self.btn_clean.gradient = ft.LinearGradient(
+                begin=ft.alignment.top_left, end=ft.alignment.bottom_right,
+                colors=["#EB4D4B", "#C0392B"]
+            )
+            self._btn_clean_icon.name = ft.icons.DELETE_FOREVER
             self.btn_reset.visible = True
 
     # ── 交互逻辑 ────────────────────────────────────────────────────────────
@@ -346,13 +368,20 @@ class ResultView(ft.Column):
 
     def _trigger_clean(self, nodes_to_clean):
         """点击确认清理按钮后，立即更新 UI 并派发异步任务"""
+        # 禁用操作，防止二次点击
         self.btn_clean.disabled = True
-        self.btn_clean.text = "正在物理粉碎中..."
-        self.btn_clean.bgcolor = ft.colors.GREY_800
         self.btn_reset.disabled = True
+        
+        # 切换按钮外观为加载态
+        if getattr(self.btn_clean.content, "controls", None):
+            self.btn_clean.content.controls[0].name = ft.icons.HOURGLASS_EMPTY
+            self.btn_clean.content.controls[1].value = "正在初始化粉碎环境..."
+            
+        self.clean_progress.visible = True
+        self.clean_progress.value = 0
         self.app.page.update()
         
-        # 抛出异步清理任务，脱离 UI 线程
+        # 抛出异步清理任务
         self.app.page.run_task(self._async_run_clean, nodes_to_clean)
 
     async def _async_run_clean(self, nodes_to_clean):
@@ -363,85 +392,82 @@ class ResultView(ft.Column):
 
         total_nodes = len(nodes_to_clean)
         processed_count = 0
-        rem_size = self._total_size_bytes
-
-        # ── 方案一：实时数值播报回调 ──────────────────────────────────────────
         last_update_ts = 0
-        def _on_progress(path, action, total_freed):
-            nonlocal processed_count, rem_size, last_update_ts
-            processed_count += 1
-            
-            # 节流：每 50ms 最多更新一次 UI，避免海量小文件导致 Flet 渲染阻塞
-            now = time.time()
-            if now - last_update_ts > 0.05 or processed_count == total_nodes:
-                if self.app.page:
-                    self.btn_clean.text = f"正在物理粉碎: {processed_count} / {total_nodes} 项..."
-                    self.app.page.update()
-                last_update_ts = now
 
-        # ── 方案三：右上角红字平滑倒吸动效 ────────────────────────────────────
-        async def _animate_size_countdown():
-            nonlocal rem_size
-            start_size = self._total_size_bytes
-            steps = 60 # 动画帧数
-            for i in range(steps + 1):
-                if not self.is_confirm_mode: break # 防止意外中断
-                progress = i / steps
-                # 减速曲线，让归零更有“吸入感”
-                ease = 1 - pow(1 - progress, 4) 
-                curr_viz_size = start_size * (1 - ease)
-                self.lbl_total_size.value = f"待清理: {_fmt_size(int(curr_viz_size))}"
-                if self.app.page:
-                    self.app.page.update()
-                await asyncio.sleep(0.01)
+        try:
+            def _on_progress(path, action, total_freed):
+                nonlocal processed_count, last_update_ts
+                processed_count += 1
+                
+                # 目标值：总大小 - 已释放大小 (total_freed 是累加字节数)
+                target_size = max(0, float(self._total_size_bytes - total_freed))
+                
+                # 节流更新 UI
+                now = time.time()
+                if now - last_update_ts > 0.03 or processed_count == total_nodes:
+                    if self.app.page:
+                        # 进度条
+                        self.clean_progress.value = processed_count / total_nodes
+                        # 按钮文案
+                        if getattr(self.btn_clean.content, "controls", None):
+                            self.btn_clean.content.controls[1].value = f"正在物理粉碎: {processed_count} / {total_nodes}"
+                        # 数字倒吸
+                        self.lbl_total_size.value = f"待清理: {_fmt_size(int(target_size))}"
+                        self.app.page.update()
+                    last_update_ts = now
 
-        # 启动倒吸动画（协程运行）
-        self.app.page.run_task(_animate_size_countdown)
+            # 执行核心清理
+            result = await asyncio.to_thread(clean, nodes_to_clean, on_progress=_on_progress, force_high=True)
 
-        # 执行核心清理（线程池执行，带进度回调）
-        result = await asyncio.to_thread(clean, nodes_to_clean, on_progress=_on_progress, force_high=True)
+            # ── 清理完成后显示圆满状态 ──────────────────────────────────────
+            if self.app.page:
+                self.lbl_total_size.value = "待清理: 0 B"
+                if getattr(self.btn_clean.content, "controls", None):
+                    self.btn_clean.content.controls[0].name = ft.icons.CHECK_CIRCLE
+                    self.btn_clean.content.controls[1].value = "清理圆满完成"
+                
+                self.btn_clean.gradient = ft.LinearGradient(
+                    begin=ft.alignment.top_left, end=ft.alignment.bottom_right,
+                    colors=["#27AE60", "#2ECC71"]
+                )
+                self.clean_progress.visible = False
+                
+                # 汇总通知
+                msg = f"清理完毕！成功释放 {result.deleted} 项，隔离 {result.trashed} 项。"
+                if result.freed_bytes > 0:
+                    msg += f" 共腾出空间 {_fmt_size(result.freed_bytes)}。"
+                
+                self.app.page.snack_bar = ft.SnackBar(ft.Text(msg), bgcolor=ft.colors.GREEN_800, duration=3000)
+                self.app.page.snack_bar.open = True
+                
+                # 数据重置
+                self.app.scan_nodes = []
+                
+                # 状态落定
+                self.app.page.update()
 
-        # 2. 清理完成后，切回主线程更新 UI
-        if self.app.page:
-            # 确保最终显示为 0
-            self.lbl_total_size.value = "待清理: 0.00 B"
-            self.btn_clean.text = "清理圆满完成"
-            self.btn_clean.bgcolor = ft.colors.GREEN_700
-            
-            # 汇总通知
-            msg = f"清理完毕！物理删除 {result.deleted} 项，移入回收站 {result.trashed} 项。"
-            if result.freed_bytes > 0:
-                msg += f" 已腾出空间 {_fmt_size(result.freed_bytes)}。"
-            
-            self.app.page.snack_bar = ft.SnackBar(
-                ft.Text(msg),
-                bgcolor=ft.colors.GREEN_800 if result.failed == 0 else ft.colors.ORANGE_800,
-                duration=5000
-            )
-            self.app.page.snack_bar.open = True
-            
-            # 数据落盘与重置
-            self.app.scan_nodes = [] # 清空扫描数据
-            
-            # 如果有移入回收站的项，弹出复核窗口
-            if result.trashed > 0:
-                self._prompt_empty_recycle_bin()
-            else:
-                self.app.navigate_to("/scan")
-            
-            self.app.page.update()
+                # 延迟跳转或弹窗，让用户能看清结果
+                await asyncio.sleep(0.8)
+
+                if result.trashed > 0:
+                    self._prompt_empty_recycle_bin()
+                else:
+                    self.app.navigate_to("/scan")
+                
+                self.app.page.update()
+
+        except Exception as e:
+            from core.logger import logger
+            logger.error(f"UI_CLEAN_TASK_ERROR: {e}", exc_info=True)
+            if self.app.page:
+                self.btn_clean.disabled = False
+                self.btn_reset.disabled = False
+                self.app.page.snack_bar = ft.SnackBar(ft.Text(f"清理过程出现中断: {e}"), bgcolor="error", open=True)
+                self.app.page.update()
 
     def _prompt_empty_recycle_bin(self):
         def _on_confirm():
-            from core.cleaner import empty_recycle_bin
-            success = empty_recycle_bin()
-            
-            msg = "回收站已彻底清空！" if success else "清空回收站失败或已为空，请查看日志。"
-            color = ft.colors.GREEN_800 if success else ft.colors.ORANGE_800
-            
-            self.app.page.snack_bar = ft.SnackBar(ft.Text(msg), bgcolor=color)
-            self.app.page.snack_bar.open = True
-            self.app.navigate_to("/scan")
+            self.app.navigate_to("/quarantine")
 
         def _on_cancel():
             self.app.navigate_to("/scan")

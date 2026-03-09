@@ -53,7 +53,24 @@ def setup_logger(name="zenclean"):
         
         logger.addHandler(file_handler)
         logger.addHandler(console_handler)
-        
+
+        # ── 启动时主动清扫过期日志 ─────────────────────────────────────
+        # TimedRotatingFileHandler 仅在下一次轮转（子夜）触发时删旧备份。
+        # 如果用户长期未打开软件，中间堆积的日志不会被清理。
+        # 因此在每次启动时主动扫描，删除超过 7 天的备份文件。
+        import os
+        import time
+        _MAX_AGE_SECONDS = 7 * 24 * 3600  # 7 天
+        try:
+            now = time.time()
+            for f in log_dir.iterdir():
+                # 匹配 zenclean.log.YYYY-MM-DD 等备份格式
+                if f.is_file() and f.name.startswith(log_file.name) and f != log_file:
+                    if now - f.stat().st_mtime > _MAX_AGE_SECONDS:
+                        f.unlink(missing_ok=True)
+        except Exception:
+            pass  # 清理失败不影响主流程
+
     return logger
 
 logger = setup_logger()

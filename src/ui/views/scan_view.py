@@ -1,8 +1,8 @@
 import shutil
+import time
 import flet as ft
 
 from core.scanner import ScanWorker
-from core.queue_consumer import QueueConsumer
 from ai.cloud_engine import get_quota
 
 
@@ -42,9 +42,10 @@ class ScanView(ft.Column):
     """
 
     def __init__(self, app):
+        super().__init__(expand=True)
         self.app = app
         self._worker: ScanWorker | None = None
-        self._consumer: QueueConsumer | None = None
+        self._last_scan_update_ts = 0
 
         # ── 未激活横幅 ────────────────────────────────────────────────────────
         self._activation_banner = ft.Container(
@@ -57,7 +58,7 @@ class ScanView(ft.Column):
                 ),
                 ft.TextButton("去激活", on_click=lambda _: self.app.navigate_to("/auth"), style=ft.ButtonStyle(color=COLOR_ZEN_GOLD)),
             ]),
-            bgcolor="#2A2A2A",
+            bgcolor=ft.colors.with_opacity(0.08, "secondary"),
             padding=10,
             border_radius=5,
             visible=not app.is_activated,
@@ -79,9 +80,10 @@ class ScanView(ft.Column):
             gradient=ft.LinearGradient(
                 begin=ft.alignment.top_left,
                 end=ft.alignment.bottom_right,
-                colors=["#1DD1A1", "#00C2FF"],
+                colors=["#00B894", "#00C2FF"], # 压深起始色，提升质感
             ),
-            shadow=ft.BoxShadow(spread_radius=2, blur_radius=25, color="#401DD1A1"),
+            border=ft.border.all(1, ft.colors.with_opacity(0.12, "onSurface")), # 边缘硬化
+            shadow=ft.BoxShadow(spread_radius=1, blur_radius=30, color=ft.colors.with_opacity(0.25, "#00B894")), # 降低扩散，加深阴影
             ink=True,
             on_click=self._start_scan,
         )
@@ -92,18 +94,64 @@ class ScanView(ft.Column):
                                      weight=ft.FontWeight.BOLD, color=COLOR_ZEN_PRIMARY, font_family="Consolas")
         self._size_text = ft.Text("可释放空间：计算中...", color=COLOR_ZEN_TEXT_DIM, size=14, font_family="Consolas")
         self._progress = ft.ProgressBar(
-            width=400, color=COLOR_ZEN_PRIMARY, bgcolor="#333333", visible=False
+            width=400, color=COLOR_ZEN_PRIMARY, bgcolor="outline", visible=False
         )
+
+        # ── 动态风险分布：用原生 Container 动画柱子替代 BarChart ──
+        # Container 的 height 变化由 Flutter 引擎 GPU 加速补间，比 BarChart 丝滑得多
+        _bar_max_h = 90
+        _bar_labels = ["低风险", "建议清理", "高风险", "隔离深区"]
+        _bar_colors = [_RISK_COLOR["LOW"], _RISK_COLOR["MEDIUM"], _RISK_COLOR["HIGH"], _RISK_COLOR["CRISIS"]]
+        self._risk_bars = []
+        self._risk_bar_max_h = _bar_max_h
+        _bar_columns = []
+        for i in range(4):
+            bar = ft.Container(
+                width=24,
+                height=2,
+                bgcolor=_bar_colors[i],
+                border_radius=ft.border_radius.only(top_left=6, top_right=6),
+                animate=ft.animation.Animation(400, "easeOutCubic"),
+            )
+            self._risk_bars.append(bar)
+            col = ft.Column(
+                [
+                    ft.Container(content=bar, alignment=ft.alignment.bottom_center, height=_bar_max_h),
+                    ft.Container(
+                        content=ft.Container(width=8, height=8, bgcolor=_bar_colors[i], border_radius=50),
+                        padding=ft.padding.only(top=4),
+                    ),
+                    ft.Text(_bar_labels[i], size=10, color=COLOR_ZEN_TEXT_DIM, text_align=ft.TextAlign.CENTER),
+                ],
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=2,
+            )
+            _bar_columns.append(col)
+        self._risk_bar_row = ft.Row(
+            _bar_columns,
+            alignment=ft.MainAxisAlignment.SPACE_EVENLY,
+            vertical_alignment=ft.CrossAxisAlignment.END,
+        )
+
         self._cancel_btn = ft.TextButton(
             "取消扫描", on_click=self._cancel_scan, visible=False, style=ft.ButtonStyle(color=COLOR_ZEN_TEXT_DIM)
         )
 
-        self._done_btn = ft.ElevatedButton(
-            "点击揭晓扫描结果",
-            icon=ft.icons.ROCKET_LAUNCH,
-            bgcolor=COLOR_ZEN_PRIMARY,
-            color="white",
+        self._done_btn = ft.Container(
+            content=ft.Row([
+                ft.Icon(ft.icons.ROCKET_LAUNCH, color="white"),
+                ft.Text("点击揭晓扫描结果", color="white", weight=ft.FontWeight.BOLD)
+            ], alignment=ft.MainAxisAlignment.CENTER),
             height=50,
+            border_radius=10,
+            gradient=ft.LinearGradient(
+                begin=ft.alignment.top_left,
+                end=ft.alignment.bottom_right,
+                colors=["#00B894", "#00C2FF"],
+            ),
+            border=ft.border.all(1, ft.colors.with_opacity(0.12, "onSurface")),
+            shadow=ft.BoxShadow(spread_radius=1, blur_radius=20, color=ft.colors.with_opacity(0.2, "#00B894")),
+            ink=True,
             on_click=lambda _: self.app.navigate_to("/result"),
             visible=False
         )
@@ -124,16 +172,16 @@ class ScanView(ft.Column):
 
         # ── 左侧：数据洞察区 (Analytics Panel) ──
         # 极简锐利科技环 (参考赛博光环设计)
-        self._donut_used = ft.PieChartSection(value=total_gb, color="#37265D", radius=12) # 暗紫/深蓝调
-        self._donut_free = ft.PieChartSection(value=0.01, color="#00E5FF", radius=12) # 极光青
+        self._donut_used = ft.PieChartSection(value=total_gb, color="secondaryContainer", radius=12)
+        self._donut_free = ft.PieChartSection(value=0.01, color="#2ECC71", radius=12)
         
-        _donut_chart = ft.PieChart(
+        self._donut_chart = ft.PieChart(
             sections=[self._donut_used, self._donut_free],
-            sections_space=0,      # 取消断层感，让环形更连贯
+            sections_space=1,      # 保留微小断层感以区分区块
             center_space_radius=90, # 压缩中空区，为下方腾空间
             expand=True,
         )
-        self._free_text_control = ft.Text("0.0 GB", size=36, weight=ft.FontWeight.W_900, color="#00E5FF", font_family="Consolas")
+        self._free_text_control = ft.Text("0.0 GB", size=36, weight=ft.FontWeight.W_900, color="primary", font_family="Consolas")
         
         # 增强版：深层霓虹发光圆环 (带 HUD 质感)
         _glow_donut = ft.Container(
@@ -152,14 +200,14 @@ class ScanView(ft.Column):
                 ),
                 
                 # 中层：实际的数据环形图
-                _donut_chart,
+                self._donut_chart,
                 
                 # 顶层：中心包裹的数据读数
                 ft.Container(
                     content=ft.Column([
                         self._free_text_control,
-                        ft.Text("可用空间", size=14, color="#A0ABC0", weight=ft.FontWeight.W_500),
-                        ft.Text(f"总容量: {total_gb:.1f} GB", size=11, color="#4B5563", font_family="Consolas"),
+                        ft.Text("可用空间", size=14, color=COLOR_ZEN_TEXT_MAIN, weight=ft.FontWeight.W_500),
+                        ft.Text(f"总容量: {total_gb:.1f} GB", size=11, color=COLOR_ZEN_TEXT_DIM, font_family="Consolas"),
                     ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2),
                     alignment=ft.alignment.center,
                 ),
@@ -234,8 +282,8 @@ class ScanView(ft.Column):
                 ft.Text("睡眠/休眠", size=13, weight=ft.FontWeight.BOLD, color=COLOR_ZEN_TEXT_MAIN),
                 ft.Text("释放 8-32GB", size=11, color=COLOR_ZEN_TEXT_DIM)
             ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2),
-            padding=15, bgcolor="#1A1D24", border_radius=10, expand=True,
-            border=ft.border.all(1, "#3300D4AA"), ink=True,
+            padding=15, bgcolor=ft.colors.with_opacity(0.03, "onSurface"), border_radius=10, expand=True,
+            border=ft.border.all(1, ft.colors.with_opacity(0.2, "primary")), ink=True,
             on_click=self._on_click_hibernation_tile,
             on_hover=self._on_hover_tile
         )
@@ -247,8 +295,8 @@ class ScanView(ft.Column):
                 ft.Text("无损搬家", size=13, weight=ft.FontWeight.BOLD, color=COLOR_ZEN_TEXT_MAIN),
                 ft.Text("微信/Docker", size=11, color=COLOR_ZEN_TEXT_DIM)
             ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2),
-            padding=15, bgcolor="#1A1D24", border_radius=10, expand=True,
-            border=ft.border.all(1, "#3300D4AA"), ink=True,
+            padding=15, bgcolor=ft.colors.with_opacity(0.03, "onSurface"), border_radius=10, expand=True,
+            border=ft.border.all(1, ft.colors.with_opacity(0.2, "primary")), ink=True,
             on_click=self._on_click_migration_tile,
             on_hover=self._on_hover_tile
         )
@@ -260,8 +308,8 @@ class ScanView(ft.Column):
                 ft.Text("陈年补丁", size=13, weight=ft.FontWeight.BOLD, color=COLOR_ZEN_TEXT_MAIN),
                 ft.Text("无法撤回", size=11, color="#E74C3C")
             ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2),
-            padding=15, bgcolor="#2A1A1A", border_radius=10, expand=True,
-            border=ft.border.all(1, "#55E74C3C"), ink=True,
+            padding=15, bgcolor=ft.colors.with_opacity(0.08, "error"), border_radius=10, expand=True,
+            border=ft.border.all(1, ft.colors.with_opacity(0.3, "error")), ink=True,
             on_click=self._on_click_update_clean_tile,
             on_hover=self._on_hover_tile
         )
@@ -273,8 +321,8 @@ class ScanView(ft.Column):
                 ft.Text("虚拟内存", size=13, weight=ft.FontWeight.BOLD, color=COLOR_ZEN_TEXT_MAIN),
                 ft.Text("转移或缩减", size=11, color="#E67E22")
             ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2),
-            padding=15, bgcolor="#1A1D24", border_radius=10, expand=True,
-            border=ft.border.all(1, "#33E67E22"), ink=True,
+            padding=15, bgcolor=ft.colors.with_opacity(0.03, "onSurface"), border_radius=10, expand=True,
+            border=ft.border.all(1, ft.colors.with_opacity(0.2, "tertiary")), ink=True,
             on_click=self._on_click_virtual_mem_tile,
             on_hover=self._on_hover_tile
         )
@@ -286,7 +334,7 @@ class ScanView(ft.Column):
         self._idle_execution = ft.Container(
             content=ft.Column([
                 self._action_tile,
-                ft.Divider(height=1, color="#2C3440"),
+                ft.Divider(height=1, thickness=1.2, color=ft.colors.with_opacity(0.3, "onSurfaceVariant")),
                 _advanced_row_1,
                 _advanced_row_2
             ], spacing=20, expand=True, alignment=ft.MainAxisAlignment.CENTER),
@@ -298,23 +346,27 @@ class ScanView(ft.Column):
             content=ft.Column(
                 [
                     ft.Row([
-                        ft.ProgressRing(width=24, height=24, stroke_width=3, color=COLOR_ZEN_PRIMARY),
+                        ft.Container(
+                            content=ft.ProgressRing(width=22, height=22, stroke_width=3, color=COLOR_ZEN_PRIMARY),
+                            padding=ft.padding.only(right=10)
+                        ),
                         ft.Text("正在执行指令集: 深度扫描中...", size=20, weight=ft.FontWeight.W_800, color=COLOR_ZEN_TEXT_MAIN),
-                    ], alignment=ft.MainAxisAlignment.START),
+                    ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=0),
                     ft.Container(height=20),
                     self._counter_text,
                     self._size_text,
                     ft.Container(height=10),
                     self._progress,
+                    ft.Container(height=15),
                     ft.Container(
                         content=ft.Column([
                             ft.Text("实时数据流 (Real-time Stream)", color=COLOR_ZEN_TEXT_DIM, size=11, font_family="Consolas"),
                             self._status_text,
                         ], spacing=5),
-                        bgcolor="#0F1115", 
+                        bgcolor="surface", 
                         padding=15,
                         border_radius=8,
-                        border=ft.border.all(1, "#11FFFFFF"),
+                        border=ft.border.all(1, ft.colors.with_opacity(0.15, "onSurface")),
                         width=float('inf')
                     ),
                     ft.Container(height=10),
@@ -348,8 +400,8 @@ class ScanView(ft.Column):
                 _glow_donut,
                 ft.Container(height=10),
                 ft.Row([
-                    ft.Text("空间大户探针 Top 5", size=15, weight=ft.FontWeight.W_800, color="white"),
-                    ft.Icon(ft.icons.INFO_OUTLINE, size=14, color="#00E5FF")
+                    ft.Text("空间大户探针 Top 5", size=15, weight=ft.FontWeight.W_800, color=COLOR_ZEN_TEXT_MAIN),
+                    ft.Icon(ft.icons.INFO_OUTLINE, size=14, color="primary")
                 ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 ft.Container(height=5),
                 self._top_folders_panel
@@ -357,9 +409,9 @@ class ScanView(ft.Column):
             expand=3, # 左 3 右 5 的比例
             padding=12,
             margin=ft.padding.only(left=20, top=20, bottom=20, right=10),
-            bgcolor="#15181E",
+            bgcolor="surfaceVariant",
             border_radius=16,
-            border=ft.border.all(1, "#2C3440"),
+            border=ft.border.all(1, ft.colors.with_opacity(0.1, "onSurface")),
         )
 
         _execution_panel_wrapper = ft.Container(
@@ -367,9 +419,9 @@ class ScanView(ft.Column):
              expand=5,
              padding=20,
              margin=ft.padding.only(left=10, top=20, bottom=20, right=20),
-             bgcolor="#15181E",
+             bgcolor="surfaceVariant",
              border_radius=16,
-             border=ft.border.all(1, "#2C3440"),
+             border=ft.border.all(1, ft.colors.with_opacity(0.1, "onSurface")),
         )
 
         # ── 聚合为主视图 ───────────────────────────────────────────
@@ -400,7 +452,6 @@ class ScanView(ft.Column):
         """立刻进入扫描态，同时在后台异步核验权限（先上车后补票）。"""
         # 1. 立即清空上次扫描结果
         self.app.scan_nodes.clear()
-        self.app.page.pubsub.send_all({"type": "scan_nodes", "nodes": []})
 
         # 2. 立即切换 UI 面板 (秒开体验)
         self._idle_execution.visible = False
@@ -408,20 +459,19 @@ class ScanView(ft.Column):
         self._progress.visible = True
         self._cancel_btn.visible = True
         self._done_btn.visible = False
-        self._status_text.value = "正在扫描 C 盘..."
+        self._status_text.value = "正在展开扫描引擎..."
+        self._counter_text.value = "正在连接扫描靶标..."
+        self._size_text.value = "可释放空间：计算中..."
+        
         self.update()
 
-        # 3. 立即启动 IPC 扫描进程
-        import multiprocessing
-        q: multiprocessing.Queue = multiprocessing.Queue()
-        self._consumer = QueueConsumer(
-            q,
-            on_nodes=self._on_nodes_th,
-            on_done=self._on_done_th,
-            on_error=self._on_error_th,
+        # 3. 立即启动 Thread 扫描进程
+        # 直接使用线程版的 ScanWorker 并将回调封入 Flet 同步队列中（保证 UI 线程安全）
+        self._worker = ScanWorker(
+            on_nodes=lambda nodes: self.app.page.run_task(self._handle_scan_nodes_ui, nodes),
+            on_done=lambda total, skipped: self.app.page.run_task(self._handle_scan_done_ui, total, skipped),
+            on_error=lambda msg: self.app.page.run_task(self._handle_scan_error_ui, msg)
         )
-        self._worker = ScanWorker(q)
-        self._consumer.start()
         self._worker.start()
 
         # 4. 同时拉起后台核验随航逻辑（仅针对当前是 VIP 的用户）
@@ -486,26 +536,41 @@ class ScanView(ft.Column):
     # ── QueueConsumer 回调（在消费线程中执行，必须使用异步方式调度到主线程安全执行） ──
 
     def did_mount(self):
-        """视图挂载到页面时，注册 pubsub 事件监听器。"""
-        self.app.page.pubsub.subscribe(self._on_pubsub_message)
+        """视图挂载到页面时，进行初始化工作。"""
         
-        # 执行甜甜圈装载动画
-        async def _animate():
-            import asyncio
-            steps = 40
-            for i in range(1, steps + 1):
-                progress = i / steps
-                ease = 1 - pow(1 - progress, 3) # easeOutCubic
-                curr_free = self._target_free_gb * ease
-                curr_used = self._target_used_gb + self._target_free_gb * (1 - ease)
-                self._donut_free.value = max(curr_free, 0.01)
-                self._donut_used.value = curr_used
-                self._free_text_control.value = f"{curr_free:.1f} GB"
-                if self.page:
-                    self.update()
-                await asyncio.sleep(0.016)
-                
-        self.app.page.run_task(_animate)
+        # 提取应用级持久标志位：由于 ScanView 每次回到 /scan 都会重新实例化，防抖锁必须挂载在 app 实例上
+        is_already_loaded = getattr(self.app, "_is_scan_dashboard_loaded", False)
+        self.app._is_scan_dashboard_loaded = True
+        
+        import os
+        cache_path = os.path.join(os.getcwd(), "zenclean_space_cache.json")
+        has_cache = os.path.exists(cache_path)
+        
+        # ── 1. 容量完全体瞬间复原 vs 甜甜圈装载动效 ──
+        # 如果不是首次进入，或者本地已经有雷达勘探结果的缓存，我们都直接跳过归零的倒吸动画以防止 UI 回退闪烁。
+        if is_already_loaded or has_cache:
+            # 跳过倒吸，瞬间渲染终态（稍后会被缓存加载覆写为彩色饼图）
+            self._donut_free.value = max(self._target_free_gb, 0.01)
+            self._donut_used.value = self._target_used_gb
+            self._free_text_control.value = f"{self._target_free_gb:.1f} GB"
+            self.update()
+        else:
+            # 只有完完全全的第一次空白环境启动，才播放吸水动画
+            async def _animate():
+                import asyncio
+                steps = 40
+                for i in range(1, steps + 1):
+                    progress = i / steps
+                    ease = 1 - pow(1 - progress, 3) # easeOutCubic
+                    curr_free = self._target_free_gb * ease
+                    curr_used = self._target_used_gb + self._target_free_gb * (1 - ease)
+                    self._donut_free.value = max(curr_free, 0.01)
+                    self._donut_used.value = curr_used
+                    self._free_text_control.value = f"{curr_free:.1f} GB"
+                    if self.page:
+                        self.update()
+                    await asyncio.sleep(0.016)
+            self.app.page.run_task(_animate)
         
         # 已激活用户异步获取 AI 额度
         if getattr(self.app, "is_activated", False):
@@ -538,7 +603,7 @@ class ScanView(ft.Column):
             
             cache_path = os.path.join(os.getcwd(), "zenclean_space_cache.json")
             
-            def _render_item(item_data):
+            def _render_item(item_data, rank):
                 # 统一渲染单个卡片的逻辑
                 size_gb = item_data['size_bytes'] / (1024**3)
                 is_junc = item_data.get('is_junction', False)
@@ -546,41 +611,72 @@ class ScanView(ft.Column):
                 path_str = item_data['path']
                 name = item_data['name']
                 
-                icon_color = "#00E5FF"
-                link_icon = ft.Icon(ft.icons.LINK, size=14, color="#00E5FF", visible=is_junc)
-                sys_icon = ft.Icon(ft.icons.SHIELD_OUTLINED, size=14, color="#E74C3C", visible=is_sys)
+                palette = ["#E74C3C", "#E67E22", "#F1C40F", "#3498DB", "#9B59B6"]
+                color_hex = palette[rank % len(palette)]
+                
+                link_icon = ft.Icon(ft.icons.LINK, size=14, color=color_hex, visible=is_junc)
+                sys_icon = ft.Icon(ft.icons.SHIELD_OUTLINED, size=14, color="error", visible=is_sys)
                 
                 return ft.Container(
                     content=ft.Row([
-                        ft.Icon(ft.icons.FOLDER_OUTLINED, size=18, color=icon_color),
+                        ft.Icon(ft.icons.FOLDER_OUTLINED, size=18, color=color_hex),
                         ft.Column([
-                            ft.Text(name, size=12, weight=ft.FontWeight.W_600, color="white"),
-                            ft.Text(f"({size_gb:.1f} GB)", size=10, color="#8B949E"),
+                            ft.Text(name, size=12, weight=ft.FontWeight.W_600, color=COLOR_ZEN_TEXT_MAIN),
+                            ft.Text(f"({size_gb:.1f} GB)", size=10, color=COLOR_ZEN_TEXT_DIM),
                         ], expand=True, spacing=2),
-                        ft.Row([link_icon, sys_icon, ft.IconButton(ft.icons.FOLDER_OPEN, icon_size=14, icon_color="#00E5FF", on_click=lambda _, p=path_str: os.startfile(p) if os.path.exists(p) else None)], spacing=0)
+                        ft.Row([link_icon, sys_icon, ft.IconButton(ft.icons.FOLDER_OPEN, icon_size=14, icon_color=color_hex, on_click=lambda _, p=path_str: os.startfile(p) if os.path.exists(p) else None)], spacing=0)
                     ], alignment=ft.MainAxisAlignment.START, spacing=10),
                     padding=ft.padding.symmetric(vertical=4, horizontal=12),
                     border_radius=8,
-                    bgcolor=ft.colors.with_opacity(0.1, "#00E5FF") if is_junc else "transparent",
+                    bgcolor=ft.colors.with_opacity(0.1, color_hex) if is_junc else ft.colors.with_opacity(0.05, "onSurface"),
                     margin=ft.padding.only(bottom=2),
-                    border=ft.border.all(1, "#00E5FF" if is_junc else "#2C3440")
+                    border=ft.border.all(1, color_hex if is_junc else ft.colors.with_opacity(0.1, "onSurfaceVariant"))
                 )
+
+            def _update_pie_chart(items):
+                # 利用收集到的 Top 文件夹切片更新左侧饼图
+                palette = ["#E74C3C", "#E67E22", "#F1C40F", "#3498DB", "#9B59B6"]
+                top_size_bytes = 0
+                sections = []
+                
+                for i, t in enumerate(items[:5]):
+                    val_gb = t["size_bytes"] / (1024**3)
+                    top_size_bytes += t["size_bytes"]
+                    sections.append(ft.PieChartSection(value=max(val_gb, 0.05), color=palette[i % len(palette)], radius=16, title=""))
+                
+                used_bytes = self._target_used_gb * (1024**3)
+                other_used_gb = max((used_bytes - top_size_bytes) / (1024**3), 0)
+                
+                # 注入 "其他已用" 与 "可用空间"
+                sections.insert(0, ft.PieChartSection(value=max(other_used_gb, 0.1), color="secondaryContainer", radius=12, title=""))
+                sections.append(ft.PieChartSection(value=max(self._target_free_gb, 0.1), color="#2ECC71", radius=12, title=""))
+                
+                if getattr(self, "_donut_chart", None):
+                    self._donut_chart.sections = sections
 
             try:
                 # 一级跳：加载离线快照 (秒开)
+                live_items = []
                 if os.path.exists(cache_path):
                     with open(cache_path, "r", encoding="utf-8") as f:
-                        cached_items = json.load(f)
-                        self._top_folders_panel.controls.clear()
-                        for item in cached_items:
-                            self._top_folders_panel.controls.append(_render_item(item))
-                        if self.page: self.update()
+                        try:
+                            live_items = json.load(f)
+                            if live_items:
+                                self._top_folders_panel.controls.clear()
+                                for i, item in enumerate(live_items[:5]):
+                                    self._top_folders_panel.controls.append(_render_item(item, i))
+                                _update_pie_chart(live_items)
+                                if self.page: self.update()
+                        except Exception:
+                            live_items = []
 
-                # 二级跳：异步启动探测
-                await asyncio.sleep(0.3)
+                # 二级跳：异步启动实时雷达探测 (后台静默)
+                # 如果当前 Session 已经跑过实时扫描，则不再重复高负载扫描
+                if is_already_loaded:
+                    return
+
+                await asyncio.sleep(0.5) 
                 directories = ["C:\\", "%USERPROFILE%", "%LOCALAPPDATA%", "%APPDATA%"]
-                
-                live_items = []
                 # 三级跳：流式更新 (动态排行榜)
                 # 使用 to_thread 迭代生成器
                 gen = stream_top_folders(directories, 15)
@@ -588,23 +684,31 @@ class ScanView(ft.Column):
                     item = await asyncio.to_thread(next, gen, None)
                     if item is None: break
                     
-                    live_items.append({
-                        "path": str(item.path),
-                        "size_bytes": item.size_bytes,
-                        "name": item.name,
-                        "is_junction": item.is_junction,
-                        "is_protected": item.is_protected
-                    })
+                    # 增量式/差异式更新：将新发现的项目与已有列表合并，去重并重排
+                    existing_paths = {it['path'] for it in live_items}
+                    if str(item.path) not in existing_paths:
+                        live_items.append({
+                            "path": str(item.path),
+                            "size_bytes": item.size_bytes,
+                            "name": item.name,
+                            "is_junction": item.is_junction,
+                            "is_protected": item.is_protected
+                        })
                     
-                    # 动态重排并刷新 UI
+                    # 动态重排
                     live_items.sort(key=lambda x: x['size_bytes'], reverse=True)
                     top_5 = live_items[:5]
                     
+                    # 平滑驱动 UI
                     self._top_folders_panel.controls.clear()
-                    for t in top_5:
-                        self._top_folders_panel.controls.append(_render_item(t))
+                    for i, t in enumerate(top_5):
+                        self._top_folders_panel.controls.append(_render_item(t, i))
+                    
+                    _update_pie_chart(top_5)
+                        
                     if self.page: self.update()
-                    await asyncio.sleep(0.05) # 给 UI 呼吸时间
+                    # 降低 UI 刷新频率，扫描早期密集时稍微等待
+                    await asyncio.sleep(0.1 if len(live_items) < 10 else 0.05)
 
                 # 保存最终快照
                 with open(cache_path, "w", encoding="utf-8") as f:
@@ -614,73 +718,78 @@ class ScanView(ft.Column):
                 logger.error(f"Top folders fetch failed: {e}")
                 if getattr(self, "_top_folders_panel", None):
                     self._top_folders_panel.controls.clear()
-                    self._top_folders_panel.controls.append(ft.Text("雷达扫描意外中断", color="#E74C3C", size=11))
+                    self._top_folders_panel.controls.append(ft.Text("雷达扫描意外中断", color="error", size=11))
                     if self.page: self.update()
 
         self.app.page.run_task(_fetch_top_folders)
 
     def will_unmount(self):
-        """视图被卸载时，移除挂载的监听器，防止内存泄漏。"""
-        self.app.page.pubsub.unsubscribe()
+        """视图被卸载时进行销毁工作。"""
+        pass
 
-    def _on_pubsub_message(self, message: dict) -> None:
-        """接收来自于消费线程广播的安全 UI 刷新指令。此方法已在主线程上下文中被调度"""
-        msg_type = message.get("type", "")
+    # ── 直接 UI 回调（从后台线程触发，经由 run_task 投递到 UI 事件循环） ──
 
-        if msg_type == "scan_nodes":
-            nodes = message.get("nodes", [])
-            self.app.scan_nodes.extend(nodes)
-            total = len(self.app.scan_nodes)
-            freed = sum(
-                n["size_bytes"] for n in self.app.scan_nodes
-                if n.get("risk_level") in ("LOW", "MEDIUM")
-            )
-            self._counter_text.value = f"已发现 {total:,} 个文件"
-            gb = freed / 1024 ** 3
-            if freed >= 1024 ** 3:
-                self._size_text.value = f"可释放空间：{gb:.2f} GB"
-            elif freed >= 1024 ** 2:
-                self._size_text.value = f"可释放空间：{freed / 1024**2:.1f} MB"
-            else:
-                self._size_text.value = f"可释放空间：{freed / 1024:.0f} KB"
-            self.update()
+    async def _handle_scan_nodes_ui(self, nodes: list[dict]) -> None:
+        if not getattr(self, "_active_execution", None) or not self._active_execution.visible:
+            return 
+            
+        self.app.scan_nodes.extend(nodes)
+        total = len(self.app.scan_nodes)
+        freed = sum(
+            n["size_bytes"] for n in self.app.scan_nodes
+            if n.get("risk_level") in ("LOW", "MEDIUM")
+        )
+        self._counter_text.value = f"已发现 {total:,} 个文件"
+        gb = freed / 1024 ** 3
+        if freed >= 1024 ** 3:
+            self._size_text.value = f"可释放空间：{gb:.2f} GB"
+        elif freed >= 1024 ** 2:
+            self._size_text.value = f"可释放空间：{freed / 1024**2:.1f} MB"
+        else:
+            self._size_text.value = f"可释放空间：{freed / 1024:.0f} KB"
+            
 
-        elif msg_type == "scan_done":
-            total = message.get("total", 0)
-            skipped = message.get("skipped", 0)
-            self._status_text.value = f"扫描完成，共 {total:,} 个文件，跳过 {skipped:,} 个"
-            self._progress.visible = False
-            self._cancel_btn.visible = False
-            self._done_btn.visible = True
-            self.update()
 
-            # 自动跳转：停留 1 秒让用户看清最终统计结果
-            if self.page:
-                import threading
-                import time
-                def _auto_nav():
-                    time.sleep(1.2)
-                    if self.page:
-                        self.app.navigate_to("/result")
-                threading.Thread(target=_auto_nav, daemon=True).start()
+        now = time.time()
+        # 限制 UI 刷新帧率（约 25FPS对应 0.04s）
+        if now - self._last_scan_update_ts > 0.04 or total == 0:
+            if self.page: self.update()
+            self._last_scan_update_ts = now
 
-        elif msg_type == "scan_error":
-            err = message.get("message", "未知错误")
-            self._status_text.value = f"扫描出错：{err}"
-            self._progress.visible = False
-            self._cancel_btn.visible = False
-            self._done_btn.visible = True
-            self.update()
+    async def _handle_scan_done_ui(self, total: int, skipped: int) -> None:
+        import asyncio
+        if self.page: self.update()
+        
+        await asyncio.sleep(0.5) 
+        
+        self._progress.visible = False
+        self._cancel_btn.visible = False
+        self._done_btn.visible = True
+        self._status_text.value = f"扫描完成，共 {total:,} 个文件，跳过 {skipped:,} 个"
+        self._status_text.color = "secondary"
 
-    # ── 丢弃过时的强同步回调（改用下发的 pubsub 推送方案） ────────────────
-    def _on_nodes_th(self, nodes: list[dict]) -> None:
-        self.app.page.pubsub.send_all({"type": "scan_nodes", "nodes": nodes})
+        self.app.has_scanned = True
+        self._worker = None
+        if self.page: self.update()
 
-    def _on_done_th(self, total: int, skipped: int) -> None:
-        self.app.page.pubsub.send_all({"type": "scan_done", "total": total, "skipped": skipped})
+        # 自动跳转：停留 1.2 秒让用户看清最终统计结果
+        if self.page:
+            async def _auto_nav():
+                await asyncio.sleep(1.2)
+                if self.page:
+                    self.app.navigate_to("/result")
+            self.app.page.run_task(_auto_nav)
 
-    def _on_error_th(self, message: str) -> None:
-        self.app.page.pubsub.send_all({"type": "scan_error", "message": message})
+    async def _handle_scan_error_ui(self, error_msg: str) -> None:
+        self._progress.visible = False
+        self._cancel_btn.visible = False
+        self._done_btn.visible = True
+        self._status_text.value = f"扫描出错: {error_msg}"
+        self._status_text.color = "error"
+
+        self.app.has_scanned = True
+        self._worker = None
+        if self.page: self.update()
 
     # ── 高阶功能：系统休眠管控弹窗 ──────────────────────────────────────────────
     def _on_click_hibernation_tile(self, e):
@@ -781,7 +890,7 @@ class ScanView(ft.Column):
             content=ft.Text("此操作将强行剥离 Windows 存根文件夹 ($PatchCache, SoftwareDistribution 等)。这将导致无法回退历史补丁版本。此高级交互界面也将在组件测试后放出。"),
             actions=[
                 ft.TextButton("取消", on_click=close_dlg, style=ft.ButtonStyle(color=COLOR_ZEN_TEXT_DIM)),
-                ft.ElevatedButton("仅供演示", on_click=close_dlg, bgcolor="#E74C3C", color="white"),
+                ft.ElevatedButton("仅供演示", on_click=close_dlg, bgcolor="error", color="white"),
             ],
             actions_alignment=ft.MainAxisAlignment.END,
         )
@@ -817,7 +926,7 @@ class ScanView(ft.Column):
             ),
             actions=[
                 ft.TextButton("取消", on_click=close_dlg, style=ft.ButtonStyle(color=COLOR_ZEN_TEXT_DIM)),
-                ft.ElevatedButton("直达系统设置", on_click=open_sysdm, bgcolor="#E67E22", color="white"),
+                ft.ElevatedButton("直达系统设置", on_click=open_sysdm, bgcolor="tertiary", color="white"),
             ],
             actions_alignment=ft.MainAxisAlignment.END,
         )

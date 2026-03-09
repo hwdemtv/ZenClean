@@ -1,31 +1,21 @@
 """
-ZenClean IPC 并发扫描引擎
+ZenClean 后台扫描引擎 (线程版)
 
 架构：
     主进程 (Flet UI)
-        └── ScanWorker (multiprocessing.Process)   ← 独立子进程，绕开 GIL
+        └── ScanWorker (threading.Thread)   ← 后台线程，避免 Windows Spawn 阻塞
                 ├── os.walk 遍历目标目录
                 ├── whitelist.is_protected() 目录剪枝
                 ├── Junction/Symlink 防死锁检测
                 ├── 隐藏/系统文件过滤
                 ├── local_engine.dispatch() 风险评估
-                └── Queue.put(batch)  每 SCAN_BATCH_SIZE 条打包推送
-
-主进程通过 QueueConsumer（见 core/queue_consumer.py）消费结果。
-
-Queue 消息格式：
-    正常批次：list[NodeDict]          — 扫描结果批次
-    结束哨兵：{"type": "done", "total": int, "skipped": int}
-    错误哨兵：{"type": "error", "message": str}
-
-使用方式：
-    worker = ScanWorker(queue, root=Path("C:\\"))
-    worker.start()
-    # 主进程侧开启 QueueConsumer 消费
+                └── callback(batch)  每 SCAN_BATCH_SIZE 条触发分发回调
 """
 
-import multiprocessing
 import os
+import time
+import threading
+from typing import Callable, Any
 from pathlib import Path
 
 from config.settings import SCAN_BATCH_SIZE, SCAN_TARGETS
@@ -77,38 +67,48 @@ def _get_size(entry: os.DirEntry) -> int:
         return 0
 
 
-class ScanWorker(multiprocessing.Process):
+class ScanWorker(threading.Thread):
     """
-    独立子进程扫描引擎（靶向模式）。
+    独立后台扫描引擎（线程版）。
 
     不再全盘遍历 C 盘。只依次对 settings.SCAN_TARGETS 中列出的
     已知垃圾/缓存热区目录进行深度 walk，大幅提升速度与精准度。
 
     Args:
-        queue:      与主进程通信的 multiprocessing.Queue。
+        on_nodes:   每批次扫描结果回调。
+        on_done:    扫描完成回调。
+        on_error:   发生错误时的回调。
         targets:    靶向目录列表，默认为 settings.SCAN_TARGETS。
         skip_hidden: 是否跳过隐藏/系统文件，默认 True。
     """
 
     def __init__(
         self,
-        queue: multiprocessing.Queue,
+        on_nodes: Callable[[list[dict]], None],
+        on_done: Callable[[int, int], None],
+        on_error: Callable[[str], None],
         targets: list[Path] | None = None,
         skip_hidden: bool = True,
     ):
-        super().__init__(daemon=True, name="ZenClean-ScanWorker")
-        self._queue = queue
+        super().__init__(daemon=True, name="ZenClean-ScanThread")
+        self._on_nodes = on_nodes
+        self._on_done = on_done
+        self._on_error = on_error
         self._targets = targets or SCAN_TARGETS
         self._skip_hidden = skip_hidden
+        self._stop_event = threading.Event()
 
-    # ── 子进程入口 ────────────────────────────────────────────────────────────
+    # ── 线程入口 ────────────────────────────────────────────────────────────
 
     def run(self) -> None:
-        """子进程主循环。所有异常都捕获后通过 error 哨兵告知主进程。"""
+        """主循环。所有异常都捕获后通过 error 哨兵告知主进程。"""
         try:
             self._scan()
         except Exception as exc:  # noqa: BLE001
-            self._queue.put({"type": "error", "message": str(exc)})
+            self._on_error(str(exc))
+            
+    def stop(self) -> None:
+        self._stop_event.set()
 
     def _scan(self) -> None:
         batch: list[dict] = []
@@ -206,14 +206,15 @@ class ScanWorker(multiprocessing.Process):
                     batch.append(node)
                     total += 1
 
-                    # 达到批次阈值，推入 Queue
+                    # 达到批次阈值，推入回调
                     if len(batch) >= SCAN_BATCH_SIZE:
-                        self._queue.put(batch)
+                        self._on_nodes(batch)
                         batch = []
 
         # 推送最后一批（不足 SCAN_BATCH_SIZE 的尾部）
         if batch:
-            self._queue.put(batch)
+            self._on_nodes(batch)
 
         # 推送结束哨兵
-        self._queue.put({"type": "done", "total": total, "skipped": skipped})
+        if not self._stop_event.is_set():
+            self._on_done(total, skipped)

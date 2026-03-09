@@ -17,7 +17,7 @@ def check_for_updates(on_result, manual=False):
             if LICENSE_SERVER_URLS:
                 base_url = LICENSE_SERVER_URLS[0].rstrip("/")
                 update_api = f"{base_url}/api/v1/update?product=zenclean&version={APP_VERSION}"
-                logger.info(f"[Updater] Checking backend API: {update_api}")
+                logger.info("[Updater] 正在检查商业网关更新...")
                 try:
                     res = requests.get(update_api, timeout=5)
                     if res.status_code == 200:
@@ -32,9 +32,9 @@ def check_for_updates(on_result, manual=False):
                                 on_result(False, APP_VERSION, "", "恭喜，当前已是最新版本。")
                                 return
                     else:
-                        logger.info(f"[Updater] Backend API returned status: {res.status_code}")
+                        logger.info(f"[Updater] 商业网关返回状态: {res.status_code}")
                 except Exception as e:
-                    logger.warning(f"[Updater] Backend API check failed (ignore if not deployed): {e}")
+                    logger.warning(f"[Updater] 商业网关检查失败: {type(e).__name__}")
 
             # 降级：如果商业网关未配置或失败，尝试多重镜像轮询 (GitHub Releases)
             # 方案优化：改用 /releases 列表接口，以支持获取最新的 Pre-release 版本 (Beta 版常用)
@@ -48,7 +48,7 @@ def check_for_updates(on_result, manual=False):
             headers = {'User-Agent': f'ZenClean-Client/{APP_VERSION}'}
             for mirror_url in MIRRORS:
                 try:
-                    logger.info(f"[Updater] Checking mirror: {mirror_url}")
+                    logger.info(f"[Updater] 尝试镜像源 #{MIRRORS.index(mirror_url)+1}...")
                     res = requests.get(mirror_url, timeout=6, headers=headers)
                     
                     if res.status_code == 200:
@@ -70,12 +70,12 @@ def check_for_updates(on_result, manual=False):
                             on_result(False, APP_VERSION, "", "恭喜，当前已是最新版本。")
                             return
                     elif res.status_code == 404:
-                        logger.info(f"[Updater] 404 on {mirror_url}")
+                        logger.info("[Updater] 当前镜像源无可用版本")
                         continue
                     else:
-                        logger.warning(f"[Updater] Mirror {mirror_url} returned {res.status_code}")
+                        logger.warning(f"[Updater] 镜像源返回异常状态: {res.status_code}")
                 except Exception as e:
-                    logger.warning(f"[Updater] Mirror {mirror_url} failed: {e}")
+                    logger.warning(f"[Updater] 镜像源访问失败: {type(e).__name__}")
                     continue
 
             # 如果走到这里还没 return，说明要么没配置地址，要么全部失败
