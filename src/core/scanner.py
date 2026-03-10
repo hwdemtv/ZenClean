@@ -117,6 +117,10 @@ class ScanWorker(threading.Thread):
         skipped = 0
 
         for target in self._targets:
+            # 检查停止标志
+            if self._stop_event.is_set():
+                break
+
             # 跳过不存在的目录（用户可能未安装 Chrome/Firefox 等）
             target_str = str(target)
             if not os.path.isdir(target_str):
@@ -125,6 +129,10 @@ class ScanWorker(threading.Thread):
             for root_str, dirs, files in os.walk(
                 target_str, topdown=True, followlinks=False, onerror=None
             ):
+                # 检查停止标志（每个目录层级检查）
+                if self._stop_event.is_set():
+                    break
+
                 # ── 目录级过滤（就地修改 dirs，阻止 os.walk 递归进入） ──────
 
                 filtered_dirs: list[str] = []

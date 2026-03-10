@@ -98,7 +98,7 @@
     3. `config/settings.py` (所有的加密盐、API URL 和特服白名单)
 
 ### 4.2 API 接口防刷与云端限流 (Gateway Rate-Limiting)
-- **现状与痛点**：目前的云端 AI 依靠 `hw-license-center` 中转，如果不加限制，一旦有人抓包拿到合法的 JWT Token，就能写脚本疯狂并发请求，耗尽我们的 GLM-4-Flash 余额（即“API 盗损”）。
+- **现状与痛点**：目前的云端 AI 依靠 `hw-license-center` 中转，如果不加限制，一旦有人抓包拿到合法的 JWT Token，就能写脚本疯狂并发请求，耗尽我们的 智谱清言 余额（即“API 盗损”）。
 - **坚固防御方案**：
   - **设备强绑定 (Device Fingerprinting)**：现有的 `core/auth.py` 已经通过 `get_device_id()` 获取了硬件指纹并和 Token 绑定。在向 AI 网关发起请求时，必须在 HTTP Header 中携带此指纹。服务端核对 Token Payload 中的 `device_id` 与请求头中的是否一致，不跨机使用。
   - **银行级签名防重放机制 (HMAC + Nonce)**：

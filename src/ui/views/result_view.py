@@ -81,7 +81,7 @@ def _build_category_chart(groups: dict[str, list[dict]]) -> ft.Container:
                     ft.Container(bgcolor=color, width=10, height=10, border_radius=2),
                     ft.Text(f"{label} ({_fmt_size(size)})", size=11, color=COLOR_ZEN_TEXT_DIM, selectable=True)
                 ], spacing=6),
-                width=160
+                width=140
             )
         )
 
@@ -102,7 +102,7 @@ def _build_category_chart(groups: dict[str, list[dict]]) -> ft.Container:
                     ft.Container(bgcolor=color, width=10, height=10, border_radius=2),
                     ft.Text(f"其他文件 ({_fmt_size(other_size)})", size=11, color=COLOR_ZEN_TEXT_DIM, selectable=True)
                 ], spacing=6),
-                width=160
+                width=140
             )
         )
 
@@ -119,29 +119,30 @@ def _build_category_chart(groups: dict[str, list[dict]]) -> ft.Container:
         ft.Text(f"共发现 {sum(len(v) for v in groups.values())} 项 • 总体积 {_fmt_size(total_size)}", size=12, color=COLOR_ZEN_TEXT_DIM),
     ], spacing=2)
 
-    # 左中右排布：左部分为饼图，右部分居中对齐、包裹图例
+    # 紧凑型：左侧小饼图 + 右侧紧凑图例
     return ft.Container(
         content=ft.Row([
-            ft.Container(content=chart, alignment=ft.alignment.center, width=130, height=130),
+            # 左侧紧凑饼图
+            ft.Container(content=chart, alignment=ft.alignment.center, width=100, height=100),
+            # 右侧紧凑图例 (更小的wrap布局)
             ft.Container(
                 content=ft.Column(
                     [
-                        summary_title, 
-                        ft.Container(height=6), # 间距
-                        ft.Row(legend_items, wrap=True, spacing=10, run_spacing=8)
-                    ], 
+                        summary_title,
+                        ft.Container(height=4),
+                        ft.Row(legend_items, wrap=True, spacing=6, run_spacing=4)
+                    ],
                     spacing=0,
-                    alignment=ft.MainAxisAlignment.CENTER
-                ), 
-                padding=ft.padding.only(left=30), 
+                    alignment=ft.MainAxisAlignment.START
+                ),
+                padding=ft.padding.only(left=15),
                 expand=True
             ),
         ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
-        padding=15,
-        border_radius=12,
-        bgcolor=ft.colors.with_opacity(0.03, ft.colors.SURFACE_VARIANT),
-        border=ft.border.all(1, ft.colors.with_opacity(0.04, "onSurface")),
-        margin=ft.margin.only(bottom=10)
+        padding=10,
+        border_radius=8,
+        bgcolor=ft.colors.with_opacity(0.02, ft.colors.SURFACE_VARIANT),
+        margin=ft.margin.only(bottom=6)
     )
 
 def _fmt_size(size_bytes: int) -> str:
@@ -217,13 +218,17 @@ class ResultView(ft.Column):
             opacity=1.0 if app.is_activated else 0.6
         )
 
-        # 分组面板容器
-        self.groups_col = ft.ListView(expand=True, spacing=8)
+        # 分组面板容器 (从 ListView 改为带滚动条的 Column，解决 ExpansionTile 与虚拟化滚动条的高度计算冲突，告别底部切边/遮挡)
+        # 此处使用 expand=True，它会尽可能霸占父级(ResultView也是一个expand=True的Column)剩下的所有高度空间
+        self.groups_col = ft.Column(expand=True, spacing=4, scroll=ft.ScrollMode.AUTO)
         
         # 进度反馈条 (清理过程专属)
         self.clean_progress = ft.ProgressBar(width=None, value=0, color=COLOR_ZEN_PRIMARY, visible=False)
 
-        self.controls = [header, self._chart_container, self.groups_col, self.clean_progress, ft.Row([self.btn_reset, self.btn_clean])]
+        # 底部操作栏（不再放置在一整个可滚动的长页面底部，而是作为页脚固定在 ResultView 的最后)
+        self.bottom_bar = ft.Row([self.btn_reset, self.btn_clean])
+
+        self.controls = [header, self._chart_container, self.groups_col, self.clean_progress, self.bottom_bar]
         self._build_data()  # 初始构建
 
     # ── 数据处理与 UI 渲染 ──────────────────────────────────────────────────
@@ -417,11 +422,9 @@ class ResultView(ft.Column):
                 )
             )
             # 增加分组间的间距
-            self.groups_col.controls.append(ft.Container(height=4))
+            self.groups_col.controls.append(ft.Container(height=2))
 
-        # 为 ListView 底部追加一个空白垫片，确保滑到底部时最后一项不会被底部的悬浮按钮（一键清理）遮挡
-        self.groups_col.controls.append(ft.Container(height=80))
-
+        # (已移除底部的 80px 隐形垫片，因为现在按钮区脱离了列表本身，成了绝对锁定的页脚)
         self._update_btn_and_total_label()
 
     def _load_data(self):
