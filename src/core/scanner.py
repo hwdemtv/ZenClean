@@ -108,6 +108,7 @@ class ScanWorker(threading.Thread):
             self._on_error(str(exc))
             
     def stop(self) -> None:
+        """请求停止扫描。设置停止标志，但仍会触发 _on_done 回调以更新 UI 状态。"""
         self._stop_event.set()
 
     def _scan(self) -> None:
@@ -215,6 +216,5 @@ class ScanWorker(threading.Thread):
         if batch:
             self._on_nodes(batch)
 
-        # 推送结束哨兵
-        if not self._stop_event.is_set():
-            self._on_done(total, skipped)
+        # 推送结束哨兵（无论扫描是否被主动停止，都需要通知 UI 更新状态）
+        self._on_done(total, skipped)

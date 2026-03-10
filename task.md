@@ -1,44 +1,56 @@
 # 任务列表：开发 C 盘大扫除工具
 
+> 最后更新：2026-03-10 | 详细执行计划见 `contexts/execution_plan_v3.md`
+
 - [x] 项目规划与初始化
     - [x] 分析现有项目逻辑
     - [x] 确定技术栈与设计目标
     - [x] 创建项目基础结构
-- [/] 核心功能与安全底层实现
-    - [x] 实现垃圾文件扫描引擎（独立子进程 IPC 隔离）
+- [x] 核心功能与安全底层实现
+    - [x] 实现垃圾文件扫描引擎（独立线程并发隔离与 Flet 消息队列回收）
     - [x] NTFS格式验证与 Junction 环路防死锁检测
     - [x] 核心系统绝对白名单 (硬编码防误删拦截)
     - [x] 实现具备备份恢复能力的清理引擎 (cleaner.py)
-    - [ ] 系统还原点 (SRSetRestorePoint) API 拦截创建机制
-    - [ ] 实现管理员权限自动请求 (UAC)
+    - [x] 系统还原点 (SRSetRestorePoint) API 拦截创建机制 → `safety_manager.py`
+    - [x] 实现管理员权限自动请求 (UAC) → `main.py` ShellExecuteW("runas")
     - [x] 实现一键恢复逻辑与系统用户文件夹（桌面/下载/文档等）无损搬家
-- [/] AI 智能分析与隐私模块
+    - [x] 隔离沙箱引擎 (quarantine.py) + 沙箱管理界面 (quarantine_view.py)
+    - [x] 休眠文件管理 (system_optimizer.py) — powercfg -h off/on
+    - [x] 修复 WinError 5 系统保护目录搬运崩溃
+- [x] AI 智能分析与隐私模块
     - [x] 本地规则引擎与脱敏 (local_engine.py)
     - [x] 本地 JSON 知识库大脑配置 (file_kb.json)
     - [x] 云端大模型 Mock 与 AI 调度器
-- [/] 界面与极速渲染开发
+- [x] 界面与极速渲染开发
     - [x] 启动闪屏 (Splash Screen) 设计
     - [x] Flet UI 列表虚拟化 (分页懒加载与按组渲染组件抽出，防假死)
-    - [/] 仪表盘页面与扫描分类树形列表
-    - [/] 备份管理、恢复页面及系统设置页
-- [/] 商业化与私域引流 (首发方案 A：固定通配码 + 设备额度限制)
+    - [x] 仪表盘页面与扫描分类树形列表
+    - [x] 备份管理、恢复页面及系统设置页
+- [x] 商业化与私域引流 (首发方案 A：固定通配码 + 设备额度限制)
     - [x] 编写授权客户端 (支持 `ZEN-VIP-YYYYMMDD` 动态通配码校验及未来验证器准备)
     - [x] 提取机器码 (`py-machineid`) 随授权请求上报，利用服务端机制限制单码激活上限
     - [x] 强校验防倒退：离线 NTP 时间防篡改检测
-    - [ ] 核心代码加密：PyArmor 逻辑混淆与 Cython (.pyd) 预编译
+    - [x] 核心代码加密：Cython (.pyd) 预编译 (auth.py, cloud_engine.py, settings.py)
     - [x] UI: 激活弹窗与引流路径 (如微信公众号扫码领卡)
     - [x] 状态区分 (标准版 / 激活无限制版)
-- [/] 操作便捷性深度集成
-    - [ ] 智能一键体检流程 (自动扫描+智能裁决预勾选)
-    - [ ] 空间释放水柱/弹簧动画特效
-    - [ ] Windows 右键菜单集成 (智能粉碎分析)
-    - [ ] 界面文件拖拽区支持 (无情裁定)
-    - [ ] 开机系统盘爆仓气泡预警
-- [ ] 高级商业化独占特性
-    - [ ] 定时静默爆仓清理任务 (Windows Task Scheduler)
+- [x] 梯队一：商业发布必备
+    - [x] Cython 核心加密编译脚本 (scripts/build_pyd.py)
+    - [x] 日志 logger.py 补充 7 天滚动截断 (TimedRotatingFileHandler)
+    - [x] EULA 强制免责勾选弹窗 (dialogs.py + app.py)
+- [x] 梯队二：体验提升
+    - [x] 禅清数据大屏图表化 (ft.PieChart/ft.BarChart)
+    - [x] 清理动效与进度反馈 (容量倒吸归零动画)
+    - [x] 设置页面开发 (settings_view.py 主题/密度/日志级别)
+- [x] 梯队三：系统级深度集成
+    - [x] Windows 右键菜单集成 (底层代码及 UI 开关基本就绪)
+    - [x] 开机系统盘爆仓气泡预警 (startup_monitor.py 已写好)
+    - [-] 界面文件拖拽区支持 (经用户指示废弃)
+    - [x] API 防刷签名 (HMAC+Nonce)
+- [ ] 梯队四：正式发行打磨
+    - [x] Inno Setup 优雅安装向导编译 (PyInstaller --onedir 模式)
+    - [-] 购买 EV 证书签名及杀毒白名单申请说明 (暂缓/无必要)
     - [ ] 终局版真实卡密校验接入 (动态专属授权池)
-- [ ] 系统维护与打包发布
-    - [ ] 日志 `logger.py` 补充 7 天全自动软截断清理策略
-    - [ ] Inno Setup 优雅安装向导编译 (PyInstaller --onedir 模式)
-    - [ ] 购买 EV 证书签名及杀毒白名单申请说明文档撰写
+- [x] 梯队五：后续进阶规划 (已经提前攻克)
+    - [x] 高危：大厂应用无损极客搬家 (解除 Demo 设限，支持微信/Docker)
+    - [x] 高危：陈年补丁粉碎 (清理 $PatchCache 等底层基建并重构 UI)
 - [ ] 验证与联合测试

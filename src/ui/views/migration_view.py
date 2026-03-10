@@ -34,8 +34,8 @@ class MigrationView(ft.Column):
         # 加载状态提示（数据读取期间显示）
         self._loading = ft.Row(
             [
-                ft.ProgressRing(width=18, height=18, stroke_width=2, color=COLOR_ZEN_PRIMARY),
-                ft.Text("正在读取系统文件夹信息...", color="#9E9E9E", size=13),
+                ft.ProgressRing(width=18, height=18, stroke_width=2, color="primary"),
+                ft.Text("正在读取系统文件夹信息...", color="onSurfaceVariant", size=13),
             ],
             spacing=10,
         )
@@ -53,10 +53,10 @@ class MigrationView(ft.Column):
                     ft.Text("系统文件夹无损搬家", size=24, weight=ft.FontWeight.BOLD),
                     ft.Text(
                         "将桌面、下载等核心默认目录物理移动至其他盘符，根治 C 盘红线。",
-                        color="#9E9E9E",
+                        color="onSurfaceVariant",
                     ),
                 ]),
-                ft.Divider(color="#333333"),
+                ft.Divider(color="outlineVariant"),
                 self._loading,
                 self._cards_col,
             ],
@@ -112,9 +112,9 @@ class MigrationView(ft.Column):
         """构建单个文件夹的迁移卡片。"""
         size_str = _fmt_size(size_bytes)
 
-        # 设置核心数据展示色
-        path_color = "#8B93A6"
-        size_color = "#FFFFFF" if on_c else "#8B93A6"
+        # 设置核心数据展示色 (动态适配)
+        path_color = "onSurfaceVariant"
+        size_color = "onSurface" if on_c else "onSurfaceVariant"
 
         if on_c:
             action_btn = ft.Container(
@@ -124,8 +124,10 @@ class MigrationView(ft.Column):
                 gradient=ft.LinearGradient(
                     begin=ft.alignment.top_left,
                     end=ft.alignment.bottom_right,
-                    colors=["#1DD1A1", "#00C2FF"],
+                    colors=["#00B894", "#00C2FF"],
                 ),
+                border=ft.border.all(1, ft.colors.with_opacity(0.12, "onSurface")),
+                shadow=ft.BoxShadow(spread_radius=1, blur_radius=10, color=ft.colors.with_opacity(0.15, "#00B894")),
                 ink=True,
                 on_click=lambda e, k=reg_key, p=path: self._on_migrate(e, k, p),
             )
@@ -134,21 +136,21 @@ class MigrationView(ft.Column):
                 "还原回 C 盘",
                 icon=ft.icons.UNDO,
                 style=ft.ButtonStyle(
-                    color={"hovered": ft.colors.WHITE, "": "#8B93A6"},
-                    side={"": ft.BorderSide(1, "#26FFFFFF")},
-                    bgcolor={"hovered": "#1AFFFFFF", "": ft.colors.TRANSPARENT},
+                    color={"hovered": "onPrimaryContainer", "": "onSurfaceVariant"},
+                    side={"": ft.BorderSide(1, "outlineVariant")},
+                    bgcolor={"hovered": "surfaceVariant", "": ft.colors.TRANSPARENT},
                 ),
                 on_click=lambda e, k=reg_key: self._on_restore(e, k),
             )
 
         def _on_hover(e):
-            e.control.bgcolor = "#1E222B" if e.data == "true" else COLOR_ZEN_SURFACE
+            e.control.bgcolor = ft.colors.with_opacity(0.08, "onSurface") if e.data == "true" else "surface"
             e.control.update()
 
         return ft.Container(
             content=ft.Row(
                 [
-                    ft.Icon(icon, color=ft.colors.BLUE_400, size=28),
+                    ft.Icon(icon, color="primary" if on_c else "onSurfaceVariant", size=28),
                     ft.Column(
                         [
                             ft.Text(label, weight=ft.FontWeight.BOLD),
@@ -170,8 +172,8 @@ class MigrationView(ft.Column):
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             padding=15,
-            bgcolor=COLOR_ZEN_SURFACE,
-            border=ft.border.all(1, "#0DFFFFFF"),
+            bgcolor="surface",
+            border=ft.border.all(1, "outlineVariant"),
             border_radius=8,
             margin=ft.margin.only(bottom=10),
             on_hover=_on_hover,

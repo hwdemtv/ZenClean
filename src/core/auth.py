@@ -1,5 +1,8 @@
 import json
 import time
+import hmac
+import hashlib
+import uuid
 from typing import Optional
 
 import jwt
@@ -16,6 +19,8 @@ from config.settings import (
 # 使用统一的全局 logger
 from core.logger import logger
 
+# 客户端与发卡中心约定的防刷加盐密钥（硬编码在代码中，配合后续的 Cython 混淆）
+API_SIGNATURE_SECRET = "zc-hwas-v1-x9fq8p2m"
 
 def get_device_id() -> str:
     """获取设备唯一硬件标识（此处使用 py-machineid）"""
@@ -69,6 +74,17 @@ def get_device_name() -> str:
         logger.error(f"Failed to get device name: {e}")
         return "Unknown-Device"
 
+def _generate_api_signature(payload_str: str, timestamp: str, nonce: str) -> str:
+    """生成防刷接口所需的防重放 HMAC-SHA256 签名"""
+    # 按照 约定好 的顺序拼接将要签名的字符串
+    message = f"{payload_str}{timestamp}{nonce}"
+    signature = hmac.new(
+        API_SIGNATURE_SECRET.encode('utf-8'),
+        message.encode('utf-8'),
+        hashlib.sha256
+    ).hexdigest()
+    return signature
+
 def verify_license_online(license_key: str, is_auto_check: bool = False) -> tuple[bool, str, Optional[dict]]:
     """
     通过 HTTP POST 向 hw-license-center 发起在线校验。
@@ -78,13 +94,27 @@ def verify_license_online(license_key: str, is_auto_check: bool = False) -> tupl
     """
     device_id = get_device_id()
     device_name = get_device_name()
-    payload = {
+    payload_dict = {
         "license_key": license_key,
         "device_id": device_id,
         "device_name": device_name,
         "product_id": LICENSE_PRODUCT_ID,
         "mode": "silent" if is_auto_check else "active"
     }
+    
+    # 构建安全头 (Security Headers)
+    payload_str = json.dumps(payload_dict, separators=(',', ':')) # 紧凑格式确保不产生空格漂移
+    timestamp = str(int(time.time()))
+    nonce = uuid.uuid4().hex
+    signature = _generate_api_signature(payload_str, timestamp, nonce)
+    
+    headers = {
+        "Content-Type": "application/json",
+        "X-Request-Timestamp": timestamp,
+        "X-Request-Nonce": nonce,
+        "X-Request-Signature": signature
+    }
+    
     masked_key = f"{license_key[:7]}******" if len(license_key) > 7 else "******"
     logger.info(f"Verifying license online (auto={is_auto_check}): {masked_key}")
 
@@ -94,7 +124,12 @@ def verify_license_online(license_key: str, is_auto_check: bool = False) -> tupl
     
     for url in LICENSE_SERVER_URLS:
         try:
-            res = requests.post(f"{url}/api/v1/auth/verify", json=payload, timeout=10)
+            res = requests.post(
+                f"{url}/api/v1/auth/verify",
+                data=payload_str,
+                headers=headers,
+                timeout=10
+            )
             # 无论成功失败，尝试抓取可能存在的全局广播通知
             notification = None
             try:
@@ -174,7 +209,8 @@ def verify_license_online(license_key: str, is_auto_check: bool = False) -> tupl
         error_msg = "网络连接失败，请检查网络\n\n详细错误:\n"
         error_msg += "\n".join(f"- {e}" for e in connection_errors[:2])
         error_msg += "\n\n建议: 检查防火墙/杀毒软件是否拦截了 ZenClean 的网络请求，或联系管理员排查代理/网关策略"
-    return False, last_error_msg
+        return False, error_msg, None
+    return False, last_error_msg, None
 
 
 def _save_local_token(token: str, backend_expires_at: Optional[str] = None, *, license_key: Optional[str] = None) -> None:

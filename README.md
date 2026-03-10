@@ -1,80 +1,87 @@
-# ZenClean (禅清)
+# ZenClean (禅清) - 互为螺旋
 
 ![ZenClean Hero](docs/images/hero.png)
 
-现代 Windows C 盘深度清理与极致优化工具 —— 让您的系统回归“禅”意般的纯净。
+现代 Windows C 盘深度清理与极致优化工具 —— 融合 AI 智能分诊与极客底层爆破，让您的系统回归“禅”意般的纯净。
 
-[![Status](https://img.shields.io/badge/Status-v0.1.1--Beta-00C2FF?style=flat-square)](https://github.com/hwdemtv/ZenClean)
+[![Status](https://img.shields.io/badge/Status-v1.0--Release-00C2FF?style=flat-square)](https://github.com/hwdemtv/ZenClean)
 [![Python](https://img.shields.io/badge/Python-3.11+-1DD1A1?style=flat-square)](https://www.python.org/)
 [![UI](https://img.shields.io/badge/UI-Flet-white?style=flat-square)](https://flet.dev/)
+[![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
-## ✨ 核心功能 (Core Features)
+## ✨ 核心特性 (Core Features)
 
-- 🧼 **AI 智能深度清理**: 接入真实云端 AI 引擎，精准识别系统冗余、应用残留与无效日志，杜绝误报误删。
-- 📦 **开发环境专项优化**: 针对极客用户，一键扫描 npm/pip/VSCode 等开发链下的巨量隐藏 `.cache` 缓存。
-- ⏳ **时光机隔离沙箱**: 提供 72 小时“反悔期”，支持误删文件的一键原路恢复，过期项目后台静默物理粉碎。
-- 🔄 **多实例 IPC 联动**: 支持 Windows 右键菜单深度集成，多开实例自动唤醒已运行的主程序并同步扫描路径。
-- 🛡️ **安全第一架构**: UAC 全自动提权、回收站全量容灾、Windows 内核级路径免杀白名单三重保障。
+### 🤖 AI 智能深度清理与时光隔离舱
+- **靶向云端研判**: 接入云端大语言模型，精准评估系统冗余、应用残留与无效日志的风险等级，杜绝误报误删。
+- **时光机双核隔离舱**: 提供“72 小时反悔期”。误删文件支持一键原路恢复；过期隔离项目由后台守护线程自动静默粉碎。
+- **动态数据大屏**: 内置精美饼图与实时清理倒吸动效，C 盘健康状况与 AI 算力监控一目了然。
+
+### 🚚 大厂应用无损极客搬家
+- **底层透明映射**: 针对微信、QQ、Docker、VSCode 扩展等“C 盘杀手”，采用 Windows NTFS Junction 技术进行底层物理搬运。
+- **零感知运行**: 搬移至 D 盘后，C 盘原有路径将生成透明软连接。应用软件**无需重装、无需修改任何配置**即可照常运行。
+- **进程级防线**: 搬家前自动侦测并挂起活跃进程，严格的容量预检与全量校验，支持随时一键无损退防。
+
+### ⚡ 深空级系统补丁粉碎 (高危)
+- **Windows 更新缓存清剿**: 自动化调用 `dism /StartComponentCleanup` 接口清剿失效的 Component Store。
+- **$PatchCache 物理强剪**: 独家深入系统禁区，强接管 `msiserver` (Windows Installer) 服务，对陈年补丁进行寿命鉴定（365天安全隔离），一键释放海量空间。
+
+### 🛡️ 系统级深度融合
+- **多实例 IPC 阻断与唤醒**: 基于 TCP 回环的单实例守护机制。如果从右键菜单重复启动，将自动唤醒已运行的主界面并下发扫描指令。
+- **静默预警与开机驻留**: 接入系统托盘 (Tray) 驻留，并注册系统任务计划程序 (schtasks)，在 C 盘爆仓时投递原生 Toast 通知。
+- **UAC 动态提权**: 核心破拆动作自动触发管理员盾牌提权请求；若拒绝提权，则自动降级启动安全浏览模式，不阻断基本使用。
 
 ## 💡 为什么选择 ZenClean? (Philosophy)
 
-如果您习惯了传统清理软件动辄扫出数十 GB 垃圾的“数字震撼”，您可能觉得 ZenClean 过于保守。这并非缺陷，而是我们建立在**性能优先与零感知干扰**之上的核心理念：
-
-1. **克制的解析策略**：我们不清理 `Cookies`、`History` 等敏感数据。清理不应导致重新登录或丢失表单。
-2. **不碰底层预编译缓存**：避免删除 `.NET` 或系统组件缓存，防止下次打开专业软件时产生额外的冷启动耗时。
-3. **拒绝地毯式扫描**：依靠精确的“垃圾热区”靶向打击（`SCAN_TARGETS`），实现秒级体检响应。
-
-## 🛠️ 近期优化成果 (Recent Improvements)
-
-- 🏗️ **底层组件化重构**: 成功抽取 `FileListItem` 与全局 `Dialog` 体系，渲染性能提升 60%+。
-- 📐 **视觉对齐大修**: 精确对齐跨容器 UI 标题中轴线，彻底解决高 Dpi 缩放下的不对齐“强迫症”。
-- 📡 **通信机制升级**: 弃用 Windows 命名管道，全面切换至 **TCP 回环 (127.0.0.1:19528)**，彻底解决管理员权限下的 IPC 通信屏障。
-- 🚀 **时光机双核驱动**: 实装了全量原路恢复引擎与后台定时静默粉碎守护线程。
-- ⚡ **性能调优**: 针对文件扫描与 UI 渲染进行了深度优化，响应速度显著提升。
-- 🧹 **代码规范化**: 遵循 PEP8 规范，提升代码可读性与可维护性。
+我们摒弃传统清理软件动辄扫出数十 GB “假面垃圾”（如浏览器 Cookies、必要的预编译库）的做法。我们的核心理念是：**性能优先、零感知干扰、极客级深度**。
+1. **不碰敏感核心**：我们绝不为了好看的数字去清理您的登录态、表单历史或 .NET 框架预编译文件（导致冷启动变慢）。
+2. **靶向精准打击**：系统更新残留、NPM/PIP/Docker 开发级废弃缓存、庞大且日益膨胀的聊天记录池，这才是我们的目标。
 
 ---
 
-## 🏗️ 技术架构 (Tech Stack)
+## 🎨 视觉与 UI 设计
+基于 `Flet` (Flutter under Python) 打造的双轨响应式主题：
+- 🌙 **赛博机甲暗色模式**: 深邃的蓝绿色调配以极客仪表盘，专注深夜高强度系统检修。
+- ☀️ **实验医疗亮色模式**: 纯净、克制的白天工作流设计。
 
-- **UI Framework**: [Flet](https://flet.dev/) (基于 Flutter 实现的 Python 声明式 UI 框架)
-- **AI Engine**: 集成智谱清言大模型，真实云端分析，支持智能风险研判。
-- **IPC Engine**: 基于 **TCP Loopback** 的单实例唤醒机制，支持跨权限边界的路径传递。
-- **Auth System**: 支持离线离机鉴权 + 后台 JWT 静默校验（基于 `py-machineid`）。
+## 🚀 极速上手 (For Users)
 
-## � 开发路线图 (Roadmap)
-
-我们正按计划向 `v1.0` 迈进：
-
-- [x] **阶段一 (核心闭环)**: 性能调优、代码规范化、多实例 IPC 唤醒、时光机隔离舱、后台静默清理。
-- [ ] **阶段二 (深度优化)**: 系统托盘驻留 (Tray)、开机自启管理、日志自动审计。
-- [ ] **阶段三 (搬家中心)**: 第三方大型应用无损迁移（基于 Junction 点）、磁盘大文件可视化看板。
-- [ ] **发布增强**: Inno Setup 自动安装向导、商用数字签名证书。
-
-## 🚀 开发者快速开始
-
-1. **配置环境变量文件（重要）**:
-   - 本仓库不会提交真实的 `.env`，请先将根目录下的 `.env.example` 复制为 `.env`，并按自己的环境修改里面的 `LICENSE_SERVER_URLS` / `AI_GATEWAY_BASE_URL` 等变量。
-   - 若你只是本地体验官方云端服务，可直接使用示例中的默认值。
-
-2. **环境准备**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. **启动程序**:
-   ```bash
-   python src/main.py
-   ```
-4. **分发打包**:
-   ```bash
-   pyinstaller zenclean.spec --clean
-   ```
-
+1. 前往 Release 页面下载最新的 `ZenClean_1.0_Release.zip` 绿色版。
+2. 解压至任意目录，**双击运行 `ZenClean.exe`**。
+3. _（可选）_ 如果系统提示弹窗，请赋予其管理员权限以解锁深层垃圾清理能力。
+4. _（注）_ 绿色免安装，自带独立运行环境，不会污染您的宿主机系统。
 
 ---
-## 🚀 极速上手
-1. 下载并解压 `ZenClean_0.x.x_Beta.zip`。
-2. **双击运行 `ZenClean.exe`**。
-3. 若提示“缺少运行库”，按引导完成 Visual C++ 安装。
 
-> 💡 更多详情请查阅 [docs/ROADMAP.md](docs/ROADMAP.md) 或 [CHANGELOG.md](CHANGELOG.md)。
+## 👨‍💻 开发者指南 (For Developers)
+
+### 1. 环境准备
+确保您的机器安装了 Python 3.11+。
+```bash
+git clone https://github.com/hwdemtv/ZenClean.git
+cd ZenClean
+pip install -r requirements.txt
+```
+
+### 2. 本地开发与调试
+本仓库不会提交真实的 `.env`，请先将根目录下的 `.env.example` 复制为 `.env`，按提示填充激活码服务端和 AI Gateway 的鉴权配置（或使用默认开发测试桩）。
+```bash
+python src/main.py
+```
+
+### 3. 全量打包与隔离审计 (生产级构建)
+我们摒弃了容易出错且会导致死锁的纯命令行打包，独家封装了带环境锁定绕过进制的构建管线。
+```bash
+# 自动清理缓存 -> 编译 PyInstaller -> 生成全量无菌包
+python scripts/build_release.py
+```
+构建成功后，在 `release_build/ZenClean/` 下即可找到完整的商业级分发产物。
+
+## 📜 免责声明
+本软件提供的“深空级清理”及“强迁搬家”功能涉及 Windows 底层核心操作（如注册表劫持、NTFS 映射与系统组件剥离）。虽然我们内置了全量容灾代码与快照，但由于系统环境极端复杂，**请务必确保在执行红色高危操作前阅读警告并理解其含义。开发者不对任何意外导致的系统崩溃、蓝屏及硬盘数据丢失承担连带法律责任**。
+
+---
+
+<div align="center">
+    <b>互为螺旋 · 禅意清扫</b><br>
+    <i>Crafted with ❤️ for Windows Geeks.</i>
+</div>

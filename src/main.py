@@ -19,8 +19,12 @@ _ICON_PATH = os.path.join(_ASSETS_DIR, "icon.ico")
 import argparse
 _parser = argparse.ArgumentParser()
 _parser.add_argument("--analyze", type=str, help="Auto analyze directory path")
+_parser.add_argument("--disk-watch", action="store_true", help="Run background disk check and exit")
+_parser.add_argument("--tray-only", action="store_true", help="Start minimized to tray")
 _args, _ = _parser.parse_known_args()
 _auto_scan_path = _args.analyze
+_is_disk_watch = _args.disk_watch
+_is_tray_only = _args.tray_only
 
 def main(page: ft.Page):
     # ── 0. 瞬间关闭 PyInstaller 启动闪屏 ──────────────────────────────────────
@@ -99,6 +103,11 @@ def main(page: ft.Page):
     tray = TrayManager(page, app, assets_dir=_ASSETS_DIR)
     tray.run()
     
+    # 如果是随系统自启，则默认隐藏窗口直接沉底托盘
+    if _is_tray_only:
+        page.window.visible = False
+        page.update()
+    
     # ── 4. IPC 监听守护线程（仅主实例运行） ────────────────────────────────
     _IPC_ADDR = ('127.0.0.1', 19528)
     def _listen_ipc():
@@ -140,8 +149,21 @@ def main(page: ft.Page):
     clean_thread.start()
     
     page.add(app)
-    # ft.Column 不参与 Flet路由系统，直接调用自己的导航方法
-    app.navigate_to("/")
+    
+    # ── 6. EULA 强制免责逻辑 ────────────────────────────────────────────────
+    def _start_app_logic():
+        # ft.Column 不参与 Flet 路由系统，直接调用自己的导航方法
+        app.navigate_to("/")
+        page.update()
+
+    # 检查本地是否已接受过 EULA
+    if page.client_storage.get("zen_eula_accepted"):
+        _start_app_logic()
+    else:
+        # 首次启动，强制弹出 EULA 对话框
+        from ui.components.dialogs import show_eula_dialog
+        show_eula_dialog(page, on_accepted=_start_app_logic)
+    
     page.update()
 
 
@@ -153,6 +175,15 @@ if __name__ == "__main__":
 
     import ctypes
     import sys
+
+    # ── 拦截底权无头监控探测任务 (无需 UI 且无需 UAC) ─────────
+    if _is_disk_watch:
+        try:
+            from core.startup_monitor import run_check
+            run_check()
+        except Exception:
+            pass
+        sys.exit(0)
 
     # ── 单实例锁：防止右键菜单等场景重复启动 ──────────────────────────────
     # 使用 Windows 命名互斥锁（Named Mutex），由内核管理，进程崩溃自动释放

@@ -8,7 +8,6 @@ from pathlib import Path
 
 try:
     from dotenv import load_dotenv
-    import sys
 
     def _get_project_root() -> Path:
         """

@@ -103,6 +103,68 @@ def enable_hibernation() -> tuple[bool, str]:
         logger.error(f"{msg} STDERR: {e.stderr}")
         return False, msg
 
+def clean_windows_updates(on_progress=None) -> tuple[bool, str]:
+    """
+    调用系统级指令 DISM 彻底粉碎 WinSxS 旧更新备份 (无法撤回)。
+    
+    Args:
+        on_progress: 进度回调函数 Callable[[float], None]，传入 0.0 - 1.0 之间的进度。
+        
+    Returns:
+        (success, message)
+    """
+    import re
+    # 匹配 DISM 输出中的进度: [======20.0%      ] 或者 [==========================100.0%==========================]
+    progress_pattern = re.compile(r"\[.*?(\d+\.\d+)%.*?\]")
+    
+    try:
+        logger.info("Executing: dism.exe /online /Cleanup-Image /StartComponentCleanup")
+        
+        # 启动子进程，开启管道读取 stdout
+        process = subprocess.Popen(
+            ["dism.exe", "/online", "/Cleanup-Image", "/StartComponentCleanup"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            creationflags=subprocess.CREATE_NO_WINDOW
+        )
+        
+        if process.stdout:
+            # 逐字符/按行读取缓冲 (DISM 经常用 \r 回车不换行来更新进度)
+            # 为了兼容 \r 我们需要按定长读取或在读取到 \r 时处理
+            buffer = ""
+            while True:
+                char = process.stdout.read(1)
+                if not char:
+                    break
+                buffer += char
+                if char in ('\r', '\n'):
+                    match = progress_pattern.search(buffer)
+                    if match and on_progress:
+                        try:
+                            percent = float(match.group(1))
+                            on_progress(percent / 100.0)
+                        except ValueError:
+                            pass
+                    buffer = "" # 清空缓冲区
+        
+        process.wait()
+        
+        if process.returncode == 0:
+            if on_progress: on_progress(1.0)
+            msg = "系统级旧补丁组件已彻底粉碎，C 盘获得了新生。"
+            logger.info(msg)
+            return True, msg
+        else:
+            msg = f"DISM 清理异常结束，返回码: {process.returncode}。(若返回 740 请检查 UAC 权限)"
+            logger.error(msg)
+            return False, msg
+            
+    except Exception as e:
+        msg = f"调用 DISM 接口时发生未知异常: {e}"
+        logger.error(msg)
+        return False, msg
+
 if __name__ == "__main__":
     # 单独测试逻辑
     enabled = is_hibernation_enabled()

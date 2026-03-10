@@ -103,7 +103,7 @@ class AuthView(ft.Column):
                         ),
                         width=90, height=90,
                         border_radius=45,
-                        bgcolor="#2A2F3A",
+                        bgcolor=ft.colors.with_opacity(0.05, "onSurface"),
                         alignment=ft.alignment.center,
                         margin=ft.margin.only(bottom=5),
                     ),
@@ -133,9 +133,10 @@ class AuthView(ft.Column):
                         gradient=ft.LinearGradient(
                             begin=ft.alignment.top_left,
                             end=ft.alignment.bottom_right,
-                            colors=["#1DD1A1", "#00C2FF"],
+                            colors=["#00B894", "#00C2FF"],
                         ),
-                        shadow=ft.BoxShadow(spread_radius=1, blur_radius=12, color="#301DD1A1"),
+                        border=ft.border.all(1, ft.colors.with_opacity(0.12, "onSurface")),
+                        shadow=ft.BoxShadow(spread_radius=1, blur_radius=20, color=ft.colors.with_opacity(0.2, "#00B894")),
                         ink=True,
                         on_click=lambda _: self.app.navigate_to("/scan")
                     ),
@@ -156,9 +157,9 @@ class AuthView(ft.Column):
                 ], spacing=2, alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, tight=True),
                 padding=20,
                 width=520,
-                border=ft.border.all(1, COLOR_ZEN_GOLD),
+                border=ft.border.all(1, "secondary"),
                 border_radius=12,
-                bgcolor="#202226"
+                bgcolor="surface"
             )
         else:
             self._diag_button = ft.TextButton(

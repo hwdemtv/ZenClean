@@ -31,10 +31,11 @@ class AppTarget:
     """定义一个可被 Junction 搬家的软件大户源"""
     id: str             # "wechat_data"
     name: str           # "微信全局数据"
-    path_template: str  # C盘绝对路径模板（支持 %USERPROFILE%, %LOCALAPPDATA% 等变量）
+    path_template: str  # C盘绝对路径模板
     icon: str           # flet font_icon identifier
-    description: str    # "包含所有聊天缓存，体积通常在 10G-100G 之间"
-    risk_level: str     # "SAFE" | "CAUTION" (影响 UI 的颜色警告)
+    description: str    # 描述
+    risk_level: str     # "SAFE" | "CAUTION"
+    process_names: list[str] = None # 关联的进程名列表，用于搬家前强制关闭检测
 
 # 预定义的打靶目标
 APP_TARGETS = [
@@ -44,7 +45,8 @@ APP_TARGETS = [
         path_template="%USERPROFILE%\\Documents\\WeChat Files",
         icon="CHAT",
         description="包含所有聊天记录、图片与各类附件",
-        risk_level="SAFE"
+        risk_level="SAFE",
+        process_names=["WeChat.exe", "WeChatApp.exe", "WeChatAppEx.exe"]
     ),
     AppTarget(
         id="tencent_qq",
@@ -52,7 +54,8 @@ APP_TARGETS = [
         path_template="%USERPROFILE%\\Documents\\Tencent Files",
         icon="FORUM",
         description="包含QQ接收的所有图片记录与文件",
-        risk_level="SAFE"
+        risk_level="SAFE",
+        process_names=["QQ.exe"]
     ),
     AppTarget(
         id="npm_cache",
@@ -75,8 +78,9 @@ APP_TARGETS = [
         name="Visual Studio Code 扩展包",
         path_template="%USERPROFILE%\\.vscode\\extensions",
         icon="TERMINAL",
-        description="极其臃肿的开发工具扩展包。搬家后可能会因跨盘访问速度轻微影响启动速度，机械硬盘用户慎选。",
-        risk_level="CAUTION"
+        description="极其臃肿的开发工具扩展包。搬家后可能会影响启动速度。",
+        risk_level="CAUTION",
+        process_names=["Code.exe"]
     ),
     AppTarget(
         id="docker_wsl",
@@ -84,7 +88,97 @@ APP_TARGETS = [
         path_template="%LOCALAPPDATA%\\Docker\\wsl\\data",
         icon="DOCKER",
         description="包含极度沉重的 Docker Image",
-        risk_level="CAUTION"
+        risk_level="CAUTION",
+        process_names=["Docker Desktop.exe", "com.docker.backend.exe", "vpnkit.exe"]
+    ),
+    AppTarget(
+        id="dingtalk",
+        name="钉钉 (DingTalk)",
+        path_template="%APPDATA%\\DingTalk",
+        icon="BUSINESS_CENTER",
+        description="办公文件、图片及视频缓存。长期使用后极度臃肿。",
+        risk_level="SAFE",
+        process_names=["DingTalk.exe"]
+    ),
+    AppTarget(
+        id="feishu",
+        name="飞书 (Feishu)",
+        path_template="%LOCALAPPDATA%\\LarkShell",
+        icon="WORK_OUTLINE",
+        description="包含聊天媒体缓存及版本更新存根。",
+        risk_level="SAFE",
+        process_names=["Feishu.exe"]
+    ),
+    AppTarget(
+        id="baidu_netdisk",
+        name="百度网盘",
+        path_template="%APPDATA%\\Baidu\\BaiduNetdisk",
+        icon="CLOUD_QUEUE",
+        description="包含数据库索引、缩略图缓存等 C 盘存根。",
+        risk_level="SAFE",
+        process_names=["BaiduNetdisk.exe"]
+    ),
+    AppTarget(
+        id="gemini_artifacts",
+        name="AI 助手历史产物 (.gemini)",
+        path_template="%USERPROFILE%\\.gemini",
+        icon="AUTO_AWESOME",
+        description="包含 AI 助手的历史录制、截图及日志产物。建议定期迁移。",
+        risk_level="SAFE"
+    ),
+    AppTarget(
+        id="ollama_models",
+        name="Ollama 本地模型",
+        path_template="%USERPROFILE%\\.ollama",
+        icon="STREAKY_LENS",
+        description="最占空间的本地大模型存放地 (Llama 3, DeepSeek 等)。",
+        risk_level="SAFE",
+        process_names=["ollama app.exe", "ollama.exe"]
+    ),
+    AppTarget(
+        id="chrome_user_data",
+        name="Chrome 浏览器数据",
+        path_template="%LOCALAPPDATA%\\Google\\Chrome\\User Data",
+        icon="WEB",
+        description="包含历史记录、扩展和巨大的网页缓存。",
+        risk_level="CAUTION",
+        process_names=["chrome.exe"]
+    ),
+    AppTarget(
+        id="edge_user_data",
+        name="Edge 浏览器数据",
+        path_template="%LOCALAPPDATA%\\Microsoft\\Edge\\User Data",
+        icon="WEB",
+        description="微软 Edge 浏览器的核心缓存与用户配置。",
+        risk_level="CAUTION",
+        process_names=["msedge.exe"]
+    ),
+    AppTarget(
+        id="chatgpt_desktop",
+        name="ChatGPT 桌面版",
+        path_template="%APPDATA%\\ChatGPT",
+        icon="AUTO_AWESOME_MOSAIC",
+        description="官方客户端的本地对话缓存与索引。",
+        risk_level="SAFE",
+        process_names=["ChatGPT.exe"]
+    ),
+    AppTarget(
+        id="claude_desktop",
+        name="Claude 桌面版",
+        path_template="%APPDATA%\\Claude",
+        icon="COLOR_LENS",
+        description="Claude 客户端的本地日志与运行数据。",
+        risk_level="SAFE",
+        process_names=["Claude.exe"]
+    ),
+    AppTarget(
+        id="cursor_ai",
+        name="Cursor AI 编辑器",
+        path_template="%APPDATA%\\Cursor",
+        icon="CODE",
+        description="AI 编程工具产生的庞大索引数据。",
+        risk_level="SAFE",
+        process_names=["Cursor.exe"]
     )
 ]
 
@@ -124,6 +218,40 @@ class AppMigrator:
             return bool(attrs & 0x400)
         except (OSError, AttributeError):
             return False
+
+    def check_process_alive(self, target_id: str) -> list[str]:
+        """检查目标 App 的进程是否仍在运行"""
+        target = next((t for t in APP_TARGETS if t.id == target_id), None)
+        if not target or not target.process_names:
+            return []
+            
+        alive = []
+        try:
+            # 使用 tasklist 检查进程
+            output = subprocess.check_output(["tasklist", "/NH", "/FO", "CSV"], shell=True, text=True)
+            for proc_name in target.process_names:
+                if proc_name.lower() in output.lower():
+                    alive.append(proc_name)
+        except Exception as e:
+            logger.error(f"Failed to check process status: {e}")
+        return alive
+
+    def kill_target_processes(self, target_id: str) -> tuple[bool, str]:
+        """强制终止目标 App 的所有进程"""
+        target = next((t for t in APP_TARGETS if t.id == target_id), None)
+        if not target or not target.process_names:
+            return True, "无需终止进程"
+            
+        errors = []
+        for proc_name in target.process_names:
+            try:
+                subprocess.run(["taskkill", "/F", "/IM", proc_name], shell=True, capture_output=True)
+            except Exception as e:
+                errors.append(f"{proc_name}: {e}")
+        
+        if errors:
+            return False, f"部分进程终止失败: {', '.join(errors)}"
+        return True, "已成功终止相关进程"
 
     def execute_migration(self, target_id: str, dest_drive: str, on_progress=None) -> tuple[bool, str]:
         """
@@ -176,39 +304,35 @@ class AppMigrator:
             return False, f"目标盘创建基准文件夹失败: {e}"
 
         moved_size = 0
+        skipped_count = 0
         
         # 使用递归复制而非重命名，原因：源与目标通常跨越不同的驱动器
-        # shutil.move 本身在跨盘时会 fallback 成 copy2 + rmtree
         try:
             items = os.listdir(src_path)
         except Exception as e:
             logger.error(f"Failed to list directory {src_path}: {e}")
             return False, f"无法读取源目录，请检查权限: {e}"
 
-        # TODO: 加入 Cancellation_token 的支持
         for item in items:
             s = src_path / item
             d = dest_base / item
             
-            # 通知 UI 当前进展
             if on_progress:
                 on_progress(moved_size, total_size, item)
                 
             try:
-                # 安全包裹状态读取与移动操作，避免遇到独占或无权限节点闪退
                 if s.is_dir():
                     shutil.move(str(s), str(d))
                 else:
                     shutil.move(str(s), str(d))
                 
-                # 简单累加估算，提高性能不深算
                 try:
                     moved_size += d.stat().st_size if d.exists() and d.is_file() else 0
                 except Exception:
                     pass
             except Exception as e:
                 logger.warning(f"Skipping unmovable item {s}: {e}")
-                # 忽略单个无法移动的问题文件，继续尽力搬运其他文件
+                skipped_count += 1
                 continue
 
         # ── 3. 删空源目录并创建 Junction ──
@@ -216,7 +340,11 @@ class AppMigrator:
             # 清理剩余的空壳目录
             if src_path.exists():
                 shutil.rmtree(str(src_path), ignore_errors=True)
-                
+
+            # 检查目录是否真的被删除，防止残留导致 Junction 创建失败
+            if src_path.exists():
+                return False, "源目录清理失败，无法创建 Junction。请检查是否有其他程序正在占用该目录。"
+
             subprocess.run(
                 ["mklink", "/J", str(src_path), str(dest_base)],
                 shell=True,
@@ -240,7 +368,10 @@ class AppMigrator:
         self._save_history(history)
         
         logger.info(f"App Migration SUCCESS: {target.name} mapped to {dest_base}")
-        return True, "迁移已成功完成。底层路由已建立闭环，该软件运行不受丝毫影响。"
+        msg = "迁移已成功完成。底层路由已建立闭环，该软件运行不受丝毫影响。"
+        if skipped_count > 0:
+            msg += f" (注: 有 {skipped_count} 个忙碌文件被跳过，不影响核心使用)"
+        return True, msg
 
     def restore_migration(self, target_id: str, on_progress=None) -> tuple[bool, str]:
         """
@@ -273,6 +404,13 @@ class AppMigrator:
         except Exception as e:
              return False, f"无法读取目标目录列队: {e}"
              
+        # 必须先重新创建被拆除的原始正常文件夹外壳
+        try:
+            os.makedirs(str(src_path), exist_ok=True)
+        except Exception as e:
+            return False, f"无法重建 C 盘原始数据文件夹: {e}"
+             
+        failed_items = []  # 记录失败的文件
         for item in items:
             s = real_dest_path / item
             d = src_path / item
@@ -280,16 +418,26 @@ class AppMigrator:
                 shutil.move(str(s), str(d))
             except Exception as e:
                 logger.warning(f"Failed to restore item {s}: {e}")
+                failed_items.append(item)
                 continue
-            
+
+        # 如果有失败的文件，清理时保留它们
+        if failed_items:
+            logger.warning(f"Failed to restore {len(failed_items)} items: {failed_items}")
+
         # ── 3. 清理废弃源和历史 ──
         try:
-            shutil.rmtree(real_dest_path, ignore_errors=True)
+            # 只清理成功迁移的项目
+            if not failed_items:
+                shutil.rmtree(real_dest_path, ignore_errors=True)
             history.remove(record)
             self._save_history(history)
         except Exception:
             pass
-            
+
+        # 返回结果，告知用户是否有文件迁移失败
+        if failed_items:
+            return True, f"已部分完成回退。{len(failed_items)} 个文件因被其他程序占用未能迁移，请手动处理。"
         return True, "已成功剥离所有映射关系，文件被完好无损退回了 C 盘。"
 
 if __name__ == "__main__":

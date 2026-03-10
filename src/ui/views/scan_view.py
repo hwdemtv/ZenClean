@@ -543,6 +543,16 @@ class ScanView(ft.Column):
         self.app._is_scan_dashboard_loaded = True
         
         import os
+        
+        # ── 0. 消费右键自动拉起扫描的目标 ──
+        if getattr(self.app, "auto_scan_path", None):
+            auto_path = self.app.auto_scan_path
+            self.app.auto_scan_path = None  # 立刻吞掉，防止路由切换时反复触发
+            if os.path.exists(auto_path):
+                self.app.scan_nodes = [auto_path]
+                # Flet 较新版本 run_task 强制要求异步协程，普通函数直接调用即可
+                self._start_scan(None)
+
         cache_path = os.path.join(os.getcwd(), "zenclean_space_cache.json")
         has_cache = os.path.exists(cache_path)
         
@@ -816,7 +826,8 @@ class ScanView(ft.Column):
                     success, msg = disable_hibernation(auto_backup=True)
                     # 异步回调到主线程更新 UI
                     if self.app.page:
-                         self.app.page.run_task(lambda: _finish_hiber_action(success, msg, disable=True))
+                         async def wrapper(): _finish_hiber_action(success, msg, disable=True)
+                         self.app.page.run_task(wrapper)
                 threading.Thread(target=_do_disable, daemon=True).start()
             else:
                  success, msg = enable_hibernation()
@@ -859,39 +870,81 @@ class ScanView(ft.Column):
 
     # ── 高阶功能：应用搬家框架 ──────────────────────────────────────────────
     def _on_click_migration_tile(self, e):
-        def close_dlg(e):
-             if hasattr(self, '_mig_dlg'):
-                self._mig_dlg.open = False
-                self.app.page.update()
-                
-        self._mig_dlg = ft.AlertDialog(
-            modal=True,
-            title=ft.Row([ft.Icon(ft.icons.DRIVE_FILE_MOVE, color="#00D4AA"), ft.Text("大厂应用极客搬家 (Demo)")]),
-            content=ft.Text("为了贯彻 100% 的数据安全性，此高危跨盘操作已被移至【阶段三：铁壁沙箱舱】。\n\n我们将等待底层 TimeMachine 容灾备份研发完毕后再开放此入口，以应对极端杀毒软件拦截导致的文件映射失败。感谢您的理解与克制。"),
-            actions=[
-                ft.TextButton("我知道了", on_click=close_dlg, style=ft.ButtonStyle(color=COLOR_ZEN_TEXT_DIM)),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
-        )
-        self.app.page.dialog = self._mig_dlg
-        self._mig_dlg.open = True
-        self.app.page.update()
+        self.app.navigate_to("/app_migration")
 
     # ── 高阶功能：补丁清理框架 ──────────────────────────────────────────────
     def _on_click_update_clean_tile(self, e):
-         def close_dlg(e):
+         from core.system_optimizer import clean_windows_updates
+         import threading
+         
+         def close_dlg(e=None):
              if hasattr(self, '_upd_dlg'):
                 self._upd_dlg.open = False
                 self.app.page.update()
                 
+         def confirm_action(e):
+             # 切换 UI 状态到进度显示
+             btn_execute.visible = False
+             btn_cancel.visible = False
+             progress_col.visible = True
+             content_text.visible = False
+             self._upd_dlg.title.controls[1].value = "正在粉碎组件仓库 (请稍候)..."
+             self.app.page.update()
+             
+             def _do_clean():
+                 def _progress(val):
+                     if self.app.page:
+                         async def prog_wrapper(): _update_prog(val)
+                         self.app.page.run_task(prog_wrapper)
+                 
+                 success, msg = clean_windows_updates(on_progress=_progress)
+                 
+                 if self.app.page:
+                     async def fin_wrapper(): _finish(success, msg)
+                     self.app.page.run_task(fin_wrapper)
+             
+             # 挂起一条线程，防止阻塞 Flet 主事件循环
+             threading.Thread(target=_do_clean, daemon=True).start()
+
+         def _update_prog(val):
+             # 放弃精准进度，因为通过 pipe 重定向后 DISM 会不再输出控制台刷新符
+             pass
+             
+         def _finish(success: bool, msg: str):
+             close_dlg()
+             color = "green" if success else ft.colors.RED_800
+             self.app.page.snack_bar = ft.SnackBar(ft.Text(msg), bgcolor=color)
+             self.app.page.snack_bar.open = True
+             self.app.page.update()
+
+         progress_bar = ft.ProgressBar(value=None, color="error", bgcolor="outline", expand=True)
+         progress_text = ft.Text("引擎运转中", size=12, color="error", font_family="Consolas")
+         progress_col = ft.Column([
+             ft.Text("正在执行指令集 (视您的磁盘瓶颈，约耗时 1~5 分钟)\n切勿强制关机/重启机器，请耐心等待弹窗自动消失！", color=COLOR_ZEN_TEXT_DIM),
+             ft.Container(height=15),
+             ft.Row([progress_bar, progress_text])
+         ], visible=False)
+
+         content_text = ft.Text(
+             "【警告：极客指令】\n\n此操作将强行剥离 Windows 底层的组件存根仓库 (WinSxS 更新备份等)。"
+             "这通常能释放 3GB ~ 15GB 的超大深层空间。\n\n"
+             "后果：您将彻底失去「卸载或回退近期个别 Windows 补丁」的能力 (但不影响系统运行与未来的新更新)。",
+             size=13
+         )
+         
+         body = ft.Stack([
+             content_text,
+             progress_col
+         ])
+
+         btn_cancel = ft.TextButton("取消", on_click=close_dlg, style=ft.ButtonStyle(color=COLOR_ZEN_TEXT_DIM))
+         btn_execute = ft.ElevatedButton("无惧后果，立即粉碎", on_click=confirm_action, bgcolor="error", color="white")
+         
          self._upd_dlg = ft.AlertDialog(
             modal=True,
             title=ft.Row([ft.Icon(ft.icons.SECURITY_UPDATE_WARNING, color="#E74C3C"), ft.Text("粉碎历史补丁", color="#E74C3C")]),
-            content=ft.Text("此操作将强行剥离 Windows 存根文件夹 ($PatchCache, SoftwareDistribution 等)。这将导致无法回退历史补丁版本。此高级交互界面也将在组件测试后放出。"),
-            actions=[
-                ft.TextButton("取消", on_click=close_dlg, style=ft.ButtonStyle(color=COLOR_ZEN_TEXT_DIM)),
-                ft.ElevatedButton("仅供演示", on_click=close_dlg, bgcolor="error", color="white"),
-            ],
+            content=ft.Container(content=body, width=420, height=130),
+            actions=[btn_cancel, btn_execute],
             actions_alignment=ft.MainAxisAlignment.END,
         )
          self.app.page.dialog = self._upd_dlg

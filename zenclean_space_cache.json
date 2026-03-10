@@ -1,35 +1,35 @@
 [
   {
     "path": "C:\\Users",
-    "size_bytes": 74738804243,
+    "size_bytes": 74163570948,
     "name": "Users",
     "is_junction": false,
     "is_protected": false
   },
   {
     "path": "C:\\Users\\hwdem\\AppData",
-    "size_bytes": 49686115994,
+    "size_bytes": 48867829859,
     "name": "AppData",
     "is_junction": false,
     "is_protected": true
   },
   {
     "path": "C:\\ProgramData",
-    "size_bytes": 14449316478,
+    "size_bytes": 14426929957,
     "name": "ProgramData",
     "is_junction": false,
     "is_protected": false
   },
   {
     "path": "C:\\Users\\hwdem\\.gemini",
-    "size_bytes": 9297920992,
+    "size_bytes": 9513343961,
     "name": ".gemini",
     "is_junction": false,
     "is_protected": false
   },
   {
     "path": "C:\\Users\\hwdem\\AppData\\Roaming\\LarkShell",
-    "size_bytes": 8821442405,
+    "size_bytes": 8453857040,
     "name": "LarkShell",
     "is_junction": false,
     "is_protected": false
@@ -43,7 +43,7 @@
   },
   {
     "path": "C:\\Users\\hwdem\\AppData\\Local\\ShadowBot",
-    "size_bytes": 5323716607,
+    "size_bytes": 5323717660,
     "name": "ShadowBot",
     "is_junction": false,
     "is_protected": false
@@ -64,7 +64,7 @@
   },
   {
     "path": "C:\\Users\\hwdem\\AppData\\Local\\Microsoft",
-    "size_bytes": 3103051134,
+    "size_bytes": 3152454926,
     "name": "Microsoft",
     "is_junction": false,
     "is_protected": false

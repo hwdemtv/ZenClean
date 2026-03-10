@@ -5,7 +5,7 @@ from config.settings import (
     COLOR_ZEN_DANGER, COLOR_ZEN_TEXT_MAIN, COLOR_ZEN_TEXT_DIM,
     COLOR_ZEN_DIVIDER
 )
-from core.quarantine import list_quarantined, restore, delete_item, auto_clean_expired, _get_best_sandbox_dir
+from core.quarantine import list_quarantined, restore, delete_item, clear_all, restore_all, _get_best_sandbox_dir
 from ui.components.dialogs import show_confirm_dialog
 
 
@@ -22,10 +22,24 @@ class QuarantineView(ft.Column):
         self.title_text = ft.Text("时光机恢复舱", size=24, weight=ft.FontWeight.BOLD, color=COLOR_ZEN_TEXT_MAIN)
         self.subtitle_text = ft.Text("沙箱隔离可为您保留 72 小时的反悔期。过期项目将被系统静默物理粉碎。", size=13, color=COLOR_ZEN_TEXT_DIM)
         
-        self.btn_auto_clean = ft.Container(
+        self.btn_restore_all = ft.Container(
             content=ft.Row([
-                ft.Icon(ft.icons.CLEANING_SERVICES, color="white", size=18),
-                ft.Text("立即清理过期项目", color="white", weight=ft.FontWeight.BOLD)
+                ft.Icon(ft.icons.RESTORE_PAGE_ROUNDED, color="white", size=18),
+                ft.Text("一键全量恢复", color="white", weight=ft.FontWeight.BOLD)
+            ], alignment=ft.MainAxisAlignment.CENTER),
+            padding=ft.padding.symmetric(horizontal=15),
+            height=40,
+            border_radius=8,
+            bgcolor="#009688",
+            border=ft.border.all(1, ft.colors.with_opacity(0.12, "onSurface")),
+            ink=True,
+            on_click=self._on_restore_all
+        )
+
+        self.btn_clear_all = ft.Container(
+            content=ft.Row([
+                ft.Icon(ft.icons.DELETE_SWEEP, color="white", size=18),
+                ft.Text("清空全部沙箱", color="white", weight=ft.FontWeight.BOLD)
             ], alignment=ft.MainAxisAlignment.CENTER),
             padding=ft.padding.symmetric(horizontal=15),
             height=40,
@@ -33,17 +47,17 @@ class QuarantineView(ft.Column):
             gradient=ft.LinearGradient(
                 begin=ft.alignment.top_left,
                 end=ft.alignment.bottom_right,
-                colors=["#00B894", "#00C2FF"],
+                colors=["#E74C3C", "#C0392B"],
             ),
             border=ft.border.all(1, ft.colors.with_opacity(0.12, "onSurface")),
-            shadow=ft.BoxShadow(spread_radius=1, blur_radius=15, color=ft.colors.with_opacity(0.15, "#00B894")),
+            shadow=ft.BoxShadow(spread_radius=1, blur_radius=15, color=ft.colors.with_opacity(0.15, "#E74C3C")),
             ink=True,
-            on_click=self._on_auto_clean
+            on_click=self._on_clear_all
         )
         
         header = ft.Row([
             ft.Column([self.title_text, self.subtitle_text], spacing=5),
-            self.btn_auto_clean
+            ft.Row([self.btn_restore_all, self.btn_clear_all], spacing=15)
         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
         
         sandbox_path = str(_get_best_sandbox_dir())
@@ -117,24 +131,20 @@ class QuarantineView(ft.Column):
         
         def _on_restore(e):
             if restore(q_id):
-                self.app.page.snack_bar = ft.SnackBar(ft.Text(f"已成功恢复: {name}"), bgcolor=ft.colors.GREEN_800)
-                self.app.page.snack_bar.open = True
+                self.app.page.open(ft.SnackBar(ft.Text(f"已成功恢复: {name}"), bgcolor=ft.colors.GREEN_800))
                 self._refresh_list()
             else:
-                self.app.page.snack_bar = ft.SnackBar(ft.Text(f"恢复失败，目标路径可能被占用或文件已丢失"), bgcolor=ft.colors.RED_800)
-                self.app.page.snack_bar.open = True
+                self.app.page.open(ft.SnackBar(ft.Text(f"恢复失败，目标路径可能被占用或文件已丢失"), bgcolor=ft.colors.RED_800))
                 self.app.page.update()
                 
         def _on_delete(e):
             def _confirm_delete(is_ok):
                 if is_ok:
                     if delete_item(q_id):
-                        self.app.page.snack_bar = ft.SnackBar(ft.Text(f"物理粉碎成功: {name}"))
-                        self.app.page.snack_bar.open = True
+                        self.app.page.open(ft.SnackBar(ft.Text(f"物理粉碎成功: {name}")))
                         self._refresh_list()
                     else:
-                        self.app.page.snack_bar = ft.SnackBar(ft.Text("粉碎失败，请检查沙箱是否被其它程序占用"), bgcolor=ft.colors.RED_800)
-                        self.app.page.snack_bar.open = True
+                        self.app.page.open(ft.SnackBar(ft.Text("粉碎失败，请检查沙箱是否被其它程序占用"), bgcolor=ft.colors.RED_800))
                         self.app.page.update()
             
             show_confirm_dialog(
@@ -175,13 +185,75 @@ class QuarantineView(ft.Column):
             border=ft.border.all(1, color=COLOR_ZEN_DIVIDER)
         )
         
-    def _on_auto_clean(self, e):
-        # 静默清理默认过期项目
-        freed = auto_clean_expired()
-        if freed > 0:
-            freed_mb = freed / (1024 * 1024)
-            self.app.page.snack_bar = ft.SnackBar(ft.Text(f"已成功清理过期隔离项目，释放 {freed_mb:.2f} MB"))
-        else:
-            self.app.page.snack_bar = ft.SnackBar(ft.Text("当前没有已过期的沙箱项目"))
-        self.app.page.snack_bar.open = True
-        self._refresh_list()
+    def _on_restore_all(self, e):
+        items = list_quarantined()
+        if not items:
+            self.app.page.open(ft.SnackBar(ft.Text("当前隔离沙箱为空，无需恢复")))
+            return
+            
+        def _confirm_restore(is_ok):
+            if is_ok:
+                original_content = self.btn_restore_all.content
+                self.btn_restore_all.content = ft.Row([
+                    ft.ProgressRing(width=16, height=16, color="white", stroke_width=2),
+                    ft.Text("正在恢复...", color="white", weight=ft.FontWeight.BOLD)
+                ], alignment=ft.MainAxisAlignment.CENTER)
+                self.btn_restore_all.disabled = True
+                self.btn_clear_all.disabled = True
+                self.update()
+
+                succ, fail = restore_all()
+                
+                self.btn_restore_all.content = original_content
+                self.btn_restore_all.disabled = False
+                self.btn_clear_all.disabled = False
+                
+                msg = f"全量恢复完成：成功 {succ}项"
+                if fail > 0:
+                    msg += f"，失败 {fail}项（路径被占用或无效）"
+                self.app.page.open(ft.SnackBar(ft.Text(msg), bgcolor=ft.colors.GREEN_800))
+                self._refresh_list()
+                
+        show_confirm_dialog(
+            self.app.page,
+            title="一键全量恢复",
+            content=ft.Text(f"您确定要将沙箱内全部 {len(items)} 个项目原路还原到系统中吗？\n如果同名文件已存在，将被跳过。"),
+            on_result=_confirm_restore,
+            confirm_text="确认恢复"
+        )
+        
+    def _on_clear_all(self, e):
+        items = list_quarantined()
+        if not items:
+            self.app.page.open(ft.SnackBar(ft.Text("当前隔离沙箱为空，无需清理")))
+            return
+            
+        def _confirm_clear(is_ok):
+            if is_ok:
+                original_content = self.btn_clear_all.content
+                self.btn_clear_all.content = ft.Row([
+                    ft.ProgressRing(width=16, height=16, color="white", stroke_width=2),
+                    ft.Text("正在粉碎...", color="white", weight=ft.FontWeight.BOLD)
+                ], alignment=ft.MainAxisAlignment.CENTER)
+                self.btn_restore_all.disabled = True
+                self.btn_clear_all.disabled = True
+                self.update()
+
+                freed = clear_all()
+                
+                self.btn_clear_all.content = original_content
+                self.btn_restore_all.disabled = False
+                self.btn_clear_all.disabled = False
+                
+                freed_mb = freed / (1024 * 1024)
+                self.app.page.open(ft.SnackBar(ft.Text(f"已排空沙箱隔舱，共物理释放空间 {freed_mb:.2f} MB")))
+                self._refresh_list()
+                
+        show_confirm_dialog(
+            self.app.page,
+            title="极度危险：全量物理粉碎",
+            content=ft.Text(f"您确定要立即摧毁沙箱内的全部 {len(items)} 个项目吗？\n操作执行后，所有处于反悔期的文件将被视为抛弃，并在磁盘上进行不可逆的擦写。"),
+            on_result=_confirm_clear,
+            confirm_text="确认全量粉碎",
+            is_danger=True
+        )

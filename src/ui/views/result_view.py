@@ -26,6 +26,124 @@ _CATEGORY_META: dict[str, tuple[str, str]] = {
 
 MAX_ITEMS_PER_GROUP = 10  # 每个分组默认展示的文件条目数
 
+# 分类配色方案
+_CHART_COLORS = [
+    "#E74C3C", "#3498DB", "#2ECC71", "#F39C12", "#9B59B6",
+    "#1ABC9C", "#E67E22", "#34495E", "#16A085", "#C0392B"
+]
+
+def _build_category_chart(groups: dict[str, list[dict]]) -> ft.Container:
+    """构建分类分布饼图及图示图例"""
+    if not groups:
+        return ft.Container()
+
+    # 计算每个分类的大小
+    cat_sizes = []
+    for cat, cat_nodes in groups.items():
+        size = sum(n.get("size_bytes", 0) for n in cat_nodes)
+        if size > 0:
+            label, _ = _CATEGORY_META.get(cat, (cat, ft.icons.FOLDER))
+            cat_sizes.append((cat, label, size))
+
+    if not cat_sizes:
+        return ft.Container()
+
+    # 按大小排序
+    cat_sizes.sort(key=lambda x: x[2], reverse=True)
+
+    # 只取前6个，其余合并为"其他"
+    main_cats = cat_sizes[:6]
+    other_size = sum(x[2] for x in cat_sizes[6:]) if len(cat_sizes) > 6 else 0
+
+    total_size = sum(x[2] for x in cat_sizes)
+
+    # 构建饼图sections与图例行
+    sections = []
+    legend_items = []
+    
+    for i, (cat, label, size) in enumerate(main_cats):
+        value_gb = size / (1024 ** 3)
+        color = _CHART_COLORS[i % len(_CHART_COLORS)]
+        
+        # 移除 title，防止在饼图上重叠，只靠 Hover
+        sections.append(
+            ft.PieChartSection(
+                value=max(value_gb, 0.05),
+                color=color,
+                radius=14,
+                title=" ", # 必须传字符串，传空串
+            )
+        )
+        # 添加定宽图例，方便在 wrap 时形成网格
+        legend_items.append(
+            ft.Container(
+                content=ft.Row([
+                    ft.Container(bgcolor=color, width=10, height=10, border_radius=2),
+                    ft.Text(f"{label} ({_fmt_size(size)})", size=11, color=COLOR_ZEN_TEXT_DIM, selectable=True)
+                ], spacing=6),
+                width=160
+            )
+        )
+
+    if other_size > 0:
+        other_gb = other_size / (1024 ** 3)
+        color = "#95A5A6"
+        sections.append(
+            ft.PieChartSection(
+                value=max(other_gb, 0.05),
+                color=color,
+                radius=14,
+                title=" "
+            )
+        )
+        legend_items.append(
+            ft.Container(
+                content=ft.Row([
+                    ft.Container(bgcolor=color, width=10, height=10, border_radius=2),
+                    ft.Text(f"其他文件 ({_fmt_size(other_size)})", size=11, color=COLOR_ZEN_TEXT_DIM, selectable=True)
+                ], spacing=6),
+                width=160
+            )
+        )
+
+    # 构建饼图组件 (适当缩小避居占位过大)
+    chart = ft.PieChart(
+        sections=sections,
+        sections_space=3,
+        center_space_radius=40,
+    )
+
+    # 统计摘要 (标题)
+    summary_title = ft.Column([
+        ft.Text("清理项分布", size=15, weight=ft.FontWeight.BOLD, color=COLOR_ZEN_TEXT_MAIN),
+        ft.Text(f"共发现 {sum(len(v) for v in groups.values())} 项 • 总体积 {_fmt_size(total_size)}", size=12, color=COLOR_ZEN_TEXT_DIM),
+    ], spacing=2)
+
+    # 左中右排布：左部分为饼图，右部分居中对齐、包裹图例
+    return ft.Container(
+        content=ft.Row([
+            ft.Container(content=chart, alignment=ft.alignment.center, width=130, height=130),
+            ft.Container(
+                content=ft.Column(
+                    [
+                        summary_title, 
+                        ft.Container(height=6), # 间距
+                        ft.Row(legend_items, wrap=True, spacing=10, run_spacing=8)
+                    ], 
+                    spacing=0,
+                    alignment=ft.MainAxisAlignment.CENTER
+                ), 
+                padding=ft.padding.only(left=30), 
+                expand=True
+            ),
+        ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        padding=15,
+        border_radius=12,
+        bgcolor=ft.colors.with_opacity(0.03, ft.colors.SURFACE_VARIANT),
+        border=ft.border.all(1, ft.colors.with_opacity(0.04, "onSurface")),
+        margin=ft.margin.only(bottom=10)
+    )
+
 def _fmt_size(size_bytes: int) -> str:
     """将字节数格式化为人类可读字符串。"""
     if size_bytes >= 1024 ** 3:
@@ -44,6 +162,7 @@ class ResultView(ft.Column):
         self.is_confirm_mode = False  # 是否处于“确认清理阶段”
         self._expanded_cats: dict[str, int] = {}  # 分组 category → 当前显示条数上限
         self._expanded_tile_keys: set[str] = set()  # 记录当前展开的分组 ID
+        self._chart_container = ft.Container(visible=False)  # 饼图容器
 
         self.lbl_total_size = ft.Text(
             "待清理: 0.00 GB",
@@ -104,15 +223,40 @@ class ResultView(ft.Column):
         # 进度反馈条 (清理过程专属)
         self.clean_progress = ft.ProgressBar(width=None, value=0, color=COLOR_ZEN_PRIMARY, visible=False)
 
-        self.controls = [header, self.groups_col, self.clean_progress, ft.Row([self.btn_reset, self.btn_clean])]
+        self.controls = [header, self._chart_container, self.groups_col, self.clean_progress, ft.Row([self.btn_reset, self.btn_clean])]
         self._build_data()  # 初始构建
 
     # ── 数据处理与 UI 渲染 ──────────────────────────────────────────────────
+
+    def _update_category_chart(self, groups: dict[str, list[dict]]):
+        """更新分类分布饼图"""
+        if not groups:
+            self._chart_container.visible = False
+            return
+
+        # 计算总节点数
+        total_nodes = sum(len(v) for v in groups.values())
+        if total_nodes < 3:  # 数据太少不显示图表
+            self._chart_container.visible = False
+            return
+
+        self._chart_container.content = _build_category_chart(groups)
+        self._chart_container.visible = True
 
     def _build_data(self):
         nodes = getattr(self.app, "scan_nodes", [])
         self.groups_col.controls.clear()
         self._total_size_bytes = 0
+
+        # 计算分类统计数据用于图表
+        groups: dict[str, list[dict]] = defaultdict(list)
+        for node in nodes:
+            cat = node.get("category", "unknown")
+            groups[cat].append(node)
+
+        # 如果有数据，显示分类分布饼图
+        if nodes:
+            self._update_category_chart(groups)
 
         if not nodes:
             self.groups_col.controls.append(
@@ -274,6 +418,9 @@ class ResultView(ft.Column):
             )
             # 增加分组间的间距
             self.groups_col.controls.append(ft.Container(height=4))
+
+        # 为 ListView 底部追加一个空白垫片，确保滑到底部时最后一项不会被底部的悬浮按钮（一键清理）遮挡
+        self.groups_col.controls.append(ft.Container(height=80))
 
         self._update_btn_and_total_label()
 

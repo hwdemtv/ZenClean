@@ -19,6 +19,7 @@ from ui.views.result_view import ResultView
 from ui.views.splash import SplashView
 from ui.views.quarantine_view import QuarantineView
 from ui.views.settings_view import SettingsView
+from ui.views.app_migration_view import AppMigrationView
 from ui.components.dialogs import show_eula_dialog
 
 class ZenCleanApp(ft.Column):
@@ -154,6 +155,7 @@ class ZenCleanApp(ft.Column):
             "/scan":      lambda: ScanView(self),
             "/result":    lambda: ResultView(self),
             "/migration": lambda: MigrationView(self),
+            "/app_migration": lambda: AppMigrationView(self),
             "/auth":      lambda: AuthView(self),
             "/quarantine":lambda: QuarantineView(self),
             "/settings":  lambda: ft.Container(content=SettingsView(self), expand=True, padding=ft.padding.only(bottom=20)),
@@ -373,7 +375,7 @@ class ZenCleanApp(ft.Column):
             return
 
         # 需要强制每次重建的视图（刷新动态数据或激活状态）
-        if route in ["/scan", "/result", "/auth", "/quarantine"] or route not in self._view_cache:
+        if route in ["/scan", "/result", "/auth", "/quarantine", "/app_migration"] or route not in self._view_cache:
             self._view_cache[route] = self._route_factories[route]()
 
         # 闪屏结束后显示导航栏与分割线

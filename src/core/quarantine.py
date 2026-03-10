@@ -225,3 +225,65 @@ def delete_item(q_id: str) -> bool:
         logger.error(f"Failed to delete {q_id} permanently: {e}")
         return False
 
+def clear_all() -> int:
+    """清空所有隔离沙箱内的项目，返回释放的字节数"""
+    registry = _load_registry()
+    freed = 0
+    for q_id, item in list(registry.items()):
+        src = Path(item["sandbox_path"])
+        size = item.get("size_bytes", 0)
+        try:
+            if src.exists():
+                if src.is_dir():
+                    shutil.rmtree(str(src), ignore_errors=True)
+                else:
+                    src.unlink(missing_ok=True)
+            freed += size
+            del registry[q_id]
+        except Exception as e:
+            logger.error(f"Failed to clear sandbox item {q_id}: {e}")
+            
+    _save_registry(registry)
+    return freed
+
+def restore_all() -> tuple[int, int]:
+    """批量原路恢复隔离沙箱内的所有项目，返回(成功恢复数量, 失败数量)"""
+    registry = _load_registry()
+    success_count = 0
+    fail_count = 0
+    
+    # 转换为列表避免在迭代时修改字典报错
+    q_ids = list(registry.keys())
+    
+    for q_id in q_ids:
+        item = registry[q_id]
+        src = Path(item["sandbox_path"])
+        dest = Path(item["original_path"])
+        
+        if not src.exists():
+            logger.warning(f"Batch restore skipping: Sandbox file missing for ID {q_id}.")
+            del registry[q_id]
+            fail_count += 1
+            continue
+            
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if dest.exists():
+                logger.error(f"Batch restore collision: {dest} already exists.")
+                fail_count += 1
+                continue
+                
+            shutil.move(str(src), str(dest))
+            del registry[q_id]
+            logger.info(f"Batch restored file from sandbox: {dest}")
+            success_count += 1
+        except Exception as e:
+            logger.error(f"Failed to batch restore {q_id}: {e}")
+            fail_count += 1
+            
+    # 全量处理完后统一保存一次，避免重复写盘引发 IO 瓶颈和竞态
+    if success_count > 0 or fail_count > 0:
+        _save_registry(registry)
+        
+    return success_count, fail_count
+

@@ -26,11 +26,14 @@ from config.settings import (
     AI_CLIENT_RATE_WINDOW,
     AI_CACHE_FILE,
 )
+import uuid
+from core.auth import _generate_api_signature
 
 # ── 线程安全的目录级缓存 ──────────────────────────────────────────────────────
 # 同一目录下的数千个缓存文件共享同一判定结果，避免重复请求
 _dir_cache: Dict[str, dict] = {}
 _cache_lock = threading.Lock()
+_cache_write_lock = threading.Lock()  # 写盘操作的信号量，防止并发写文件
 
 def _load_cache_from_disk():
     """程序启动时，从本地 JSON 加载曾经的 AI 判决记忆"""
@@ -45,17 +48,24 @@ def _load_cache_from_disk():
             logger.error(f"Failed to load AI cache from {AI_CACHE_FILE}: {e}")
 
 def _save_cache_to_disk():
-    """将运行期间收集的新 AI 判决增量保存到本地硬盘"""
+    """将运行期间收集的新 AI 判决增量保存到本地硬盘（线程安全）"""
+    # 使用信号量防止并发写盘导致的数据竞争
+    if not _cache_write_lock.acquire(blocking=False):
+        # 如果已有写盘线程在运行，跳过本次写操作
+        return
+
     try:
         AI_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
         with _cache_lock:
             # 安全拷贝一份当前数据进行写盘，避免一直占据锁
             data_to_save = _dir_cache.copy()
-            
+
         with open(AI_CACHE_FILE, "w", encoding="utf-8") as f:
             json.dump(data_to_save, f, ensure_ascii=False, indent=2)
     except Exception as e:
         logger.error(f"Failed to save AI cache to disk: {e}")
+    finally:
+        _cache_write_lock.release()
 
 # 初始化时自动加载持久化缓存
 _load_cache_from_disk()
@@ -188,7 +198,7 @@ def query(sanitized_path: str) -> dict:
         "Authorization": f"Bearer {token}",
     }
 
-    # 4. 构造请求体（向 AI 发送脱敏目录路径，让其判定用途和风险）
+    # 4. 构造请求体并计算签名
     payload = {
         "messages": [
             {
@@ -210,6 +220,17 @@ def query(sanitized_path: str) -> dict:
         ],
         "stream": True,
     }
+    
+    payload_str = json.dumps(payload, separators=(',', ':'))
+    timestamp = str(int(time.time()))
+    nonce = uuid.uuid4().hex
+    signature = _generate_api_signature(payload_str, timestamp, nonce)
+    
+    headers.update({
+        "X-Request-Timestamp": timestamp,
+        "X-Request-Nonce": nonce,
+        "X-Request-Signature": signature
+    })
 
     logger.info(f"向云端 AI 网关发送分析请求: {dir_path}")
 
@@ -217,7 +238,7 @@ def query(sanitized_path: str) -> dict:
         # 5. 发送 SSE 流式请求
         res = requests.post(
             AI_ANALYZE_URL,
-            json=payload,
+            data=payload_str,
             headers=headers,
             timeout=AI_REQUEST_TIMEOUT,
             stream=True,
@@ -286,9 +307,20 @@ def get_quota() -> dict | None:
         return None
 
     try:
+        # GET 请求无需对 Payload 加密散列，传入空字符串
+        timestamp = str(int(time.time()))
+        nonce = uuid.uuid4().hex
+        signature = _generate_api_signature("", timestamp, nonce)
+        
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "X-Request-Timestamp": timestamp,
+            "X-Request-Nonce": nonce,
+            "X-Request-Signature": signature
+        }
         res = requests.get(
             AI_QUOTA_URL,
-            headers={"Authorization": f"Bearer {token}"},
+            headers=headers,
             timeout=5,
         )
         if res.status_code == 200:
