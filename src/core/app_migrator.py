@@ -523,125 +523,218 @@ class AppMigrator:
 
     def execute_migration(self, target_id: str, dest_drive: str, on_progress=None) -> tuple[bool, str]:
         """
-        开始给特定的第三方 App 数据搬家
+        开始给特定的第三方 App 数据搬家（原子性版本，支持断点恢复）
+
         Args:
            target_id:  来自 APP_TARGETS 的 id
            dest_drive: 形如 "D:"
+           on_progress: 进度回调函数 (moved_size, total_size, current_item)
         """
         target = next((t for t in APP_TARGETS if t.id == target_id), None)
         if not target:
             return False, f"未识别的目标 App ID: {target_id}"
-            
+
         src_path_str = os.path.expandvars(target.path_template)
         src_path = Path(src_path_str)
-        
+
         if not src_path.exists():
             return False, f"[{target.name}] 数据目录不存在: {src_path.name}，可能该设备尚未安装或运行过该软件。"
-            
+
         if self.is_already_migrated(src_path):
             return False, f"[{target.name}] 已经是一个连接点 (Junction)，疑似已经被搬家过了。"
-            
+
         if src_path.drive.upper() == dest_drive.upper():
             return False, "源路径已经在目标盘符下，无法执行同盘映射。"
 
         dest_base = Path(dest_drive) / "ZenClean_AppSpace" / target.name
-        
-        # ── 1. 容量预检 ──
-        total_size = 0
-        try:
-            for root, dirs, files in os.walk(src_path):
-                for f in files:
-                    fp = os.path.join(root, f)
-                    if not os.path.islink(fp):
-                        total_size += os.path.getsize(fp)
-        except Exception as e:
-            logger.error(f"Failed to calculate dir size for migration preflight: {e}")
-            return False, "未能成功取得文件夹总容量（权限受限或有文件被高度占用）。建议关闭对应软件后再试。"
 
-        try:
-            free = shutil.disk_usage(dest_drive + "\\").free
-            if free < (total_size * 1.1):  # 留出 10% 余量
-                return False, f"目标盘 '{dest_drive}' 空间不足 (需要 {total_size / 1024**3:.2f}GB)。"
-        except Exception as e:
-            return False, f"无法读取目标盘空间状态: {e}"
-
-        # ── 2. 开始逐一迁移文件 ──
-        try:
-            os.makedirs(dest_base, exist_ok=True)
-        except Exception as e:
-            return False, f"目标盘创建基准文件夹失败: {e}"
-
-        moved_size = 0
-        skipped_count = 0
-        
-        # 使用递归复制而非重命名，原因：源与目标通常跨越不同的驱动器
-        try:
-            items = os.listdir(src_path)
-        except Exception as e:
-            logger.error(f"Failed to list directory {src_path}: {e}")
-            return False, f"无法读取源目录，请检查权限: {e}"
-
-        for item in items:
-            s = src_path / item
-            d = dest_base / item
-            
-            if on_progress:
-                on_progress(moved_size, total_size, item)
-                
-            try:
-                if s.is_dir():
-                    shutil.move(str(s), str(d))
-                else:
-                    shutil.move(str(s), str(d))
-                
-                try:
-                    moved_size += d.stat().st_size if d.exists() and d.is_file() else 0
-                except Exception:
-                    pass
-            except Exception as e:
-                logger.warning(f"Skipping unmovable item {s}: {e}")
-                skipped_count += 1
-                continue
-
-        # ── 3. 删空源目录并创建 Junction ──
-        try:
-            # 清理剩余的空壳目录
-            if src_path.exists():
-                shutil.rmtree(str(src_path), ignore_errors=True)
-
-            # 检查目录是否真的被删除，防止残留导致 Junction 创建失败
-            if src_path.exists():
-                return False, "源目录清理失败，无法创建 Junction。请检查是否有其他程序正在占用该目录。"
-
-            subprocess.run(
-                ["mklink", "/J", str(src_path), str(dest_base)],
-                shell=True,
-                capture_output=True,
-                check=True
-            )
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Junction Link Creation Failed! STDERR: {e.stderr}")
-            return False, "底层跨盘隐式映射(Junction)构建失败，请确保您以管理员权限启动。"
-
-        # ── 4. 收尾日志写入（含增量监控字段）──
-        history = self.get_history()
-        history.append({
+        # ════════════════════════════════════════════════════════════════════
+        # 阶段 1: 预检 - 创建状态文件
+        # ════════════════════════════════════════════════════════════════════
+        state = {
             "target_id": target.id,
             "target_name": target.name,
-            "migrated_at": datetime.now().isoformat(),
-            "original_path": str(src_path),
+            "phase": MigrationPhase.PREFLIGHT.value,
+            "src_path": str(src_path),
             "dest_path": str(dest_base),
-            "size_bytes": total_size,
-            "last_check_time": datetime.now().isoformat(),  # 增量监控：上次检查时间
-            "last_size": total_size,  # 增量监控：上次检查时的大小
-        })
-        self._save_history(history)
+            "dest_drive": dest_drive,
+            "start_time": datetime.now().isoformat(),
+            "total_size": 0,
+            "moved_items": [],
+            "failed_items": [],
+            "error": None,
+        }
+        self._save_state(state)
 
-        logger.info(f"App Migration SUCCESS: {target.name} mapped to {dest_base}")
-        msg = "迁移已成功完成。底层路由已建立闭环，该软件运行不受丝毫影响。"
-        if skipped_count > 0:
-            msg += f" (注: 有 {skipped_count} 个忙碌文件被跳过，不影响核心使用)"
-        return True, msg
+        try:
+            # 容量预检
+            total_size = 0
+            try:
+                for root, dirs, files in os.walk(src_path):
+                    for f in files:
+                        fp = os.path.join(root, f)
+                        if not os.path.islink(fp):
+                            total_size += os.path.getsize(fp)
+            except Exception as e:
+                logger.error(f"Failed to calculate dir size for migration preflight: {e}")
+                state["phase"] = MigrationPhase.FAILED.value
+                state["error"] = str(e)
+                self._save_state(state)
+                return False, "未能成功取得文件夹总容量（权限受限或有文件被高度占用）。建议关闭对应软件后再试。"
+
+            state["total_size"] = total_size
+
+            try:
+                free = shutil.disk_usage(dest_drive + "\\").free
+                if free < (total_size * 1.1):  # 留出 10% 余量
+                    err_msg = f"目标盘 '{dest_drive}' 空间不足 (需要 {total_size / 1024**3:.2f}GB)。"
+                    state["phase"] = MigrationPhase.FAILED.value
+                    state["error"] = err_msg
+                    self._save_state(state)
+                    return False, err_msg
+            except Exception as e:
+                state["phase"] = MigrationPhase.FAILED.value
+                state["error"] = str(e)
+                self._save_state(state)
+                return False, f"无法读取目标盘空间状态: {e}"
+
+            # ════════════════════════════════════════════════════════════════════
+            # 阶段 2: 复制文件 - 逐个迁移并记录状态
+            # ════════════════════════════════════════════════════════════════════
+            state["phase"] = MigrationPhase.COPYING.value
+            self._save_state(state)
+
+            try:
+                os.makedirs(dest_base, exist_ok=True)
+            except Exception as e:
+                state["phase"] = MigrationPhase.FAILED.value
+                state["error"] = f"目标盘创建基准文件夹失败: {e}"
+                self._save_state(state)
+                return False, state["error"]
+
+            moved_size = 0
+            skipped_count = 0
+
+            try:
+                items = os.listdir(src_path)
+            except Exception as e:
+                logger.error(f"Failed to list directory {src_path}: {e}")
+                state["phase"] = MigrationPhase.FAILED.value
+                state["error"] = f"无法读取源目录: {e}"
+                self._save_state(state)
+                return False, state["error"]
+
+            for item in items:
+                s = src_path / item
+                d = dest_base / item
+
+                if on_progress:
+                    on_progress(moved_size, total_size, item)
+
+                try:
+                    if s.is_dir():
+                        shutil.move(str(s), str(d))
+                    else:
+                        shutil.move(str(s), str(d))
+
+                    # 记录已移动的项目
+                    state["moved_items"].append(item)
+                    moved_size += d.stat().st_size if d.exists() and d.is_file() else 0
+
+                    # 每移动一个项目就保存状态（关键！）
+                    state["current_moved_size"] = moved_size
+                    self._save_state(state)
+
+                except Exception as e:
+                    logger.warning(f"Skipping unmovable item {s}: {e}")
+                    state["failed_items"].append(item)
+                    skipped_count += 1
+                    self._save_state(state)
+                    continue
+
+            # ════════════════════════════════════════════════════════════════════
+            # 阶段 3: 验证完整性
+            # ════════════════════════════════════════════════════════════════════
+            state["phase"] = MigrationPhase.VERIFYING.value
+            self._save_state(state)
+
+            # 验证目标目录非空
+            if not any(dest_base.iterdir()):
+                state["phase"] = MigrationPhase.FAILED.value
+                state["error"] = "目标目录为空，迁移可能失败"
+                self._save_state(state)
+                return False, state["error"]
+
+            # ════════════════════════════════════════════════════════════════════
+            # 阶段 4: 创建 Junction（最关键的原子操作）
+            # ════════════════════════════════════════════════════════════════════
+            state["phase"] = MigrationPhase.CREATING_JUNCTION.value
+            self._save_state(state)
+
+            try:
+                # 清理剩余的空壳目录
+                if src_path.exists():
+                    shutil.rmtree(str(src_path), ignore_errors=True)
+
+                # 检查目录是否真的被删除
+                if src_path.exists():
+                    # 不删除状态文件，允许用户手动干预后恢复
+                    state["phase"] = MigrationPhase.FAILED.value
+                    state["error"] = "源目录清理失败，无法创建 Junction。请检查是否有其他程序正在占用该目录。"
+                    self._save_state(state)
+                    return False, state["error"]
+
+                subprocess.run(
+                    ["mklink", "/J", str(src_path), str(dest_base)],
+                    shell=True,
+                    capture_output=True,
+                    check=True
+                )
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Junction Link Creation Failed! STDERR: {e.stderr}")
+                # 关键：Junction 创建失败，但数据已在目标盘，状态文件保留以便恢复
+                state["phase"] = MigrationPhase.FAILED.value
+                state["error"] = "底层跨盘隐式映射(Junction)构建失败，但数据已迁移到目标盘。可尝试手动创建 Junction 或使用恢复功能。"
+                self._save_state(state)
+                return False, state["error"]
+
+            # ════════════════════════════════════════════════════════════════════
+            # 阶段 5: 完成 - 清理状态文件并记录历史
+            # ════════════════════════════════════════════════════════════════════
+            state["phase"] = MigrationPhase.COMPLETED.value
+            state["end_time"] = datetime.now().isoformat()
+            self._save_state(state)
+
+            # 写入历史记录
+            history = self.get_history()
+            history.append({
+                "target_id": target.id,
+                "target_name": target.name,
+                "migrated_at": datetime.now().isoformat(),
+                "original_path": str(src_path),
+                "dest_path": str(dest_base),
+                "size_bytes": total_size,
+                "last_check_time": datetime.now().isoformat(),
+                "last_size": total_size,
+            })
+            self._save_history(history)
+
+            # 清理状态文件（迁移成功后）
+            self._clear_state(target.id)
+
+            logger.info(f"App Migration SUCCESS: {target.name} mapped to {dest_base}")
+            msg = "迁移已成功完成。底层路由已建立闭环，该软件运行不受丝毫影响。"
+            if skipped_count > 0:
+                msg += f" (注: 有 {skipped_count} 个忙碌文件被跳过，不影响核心使用)"
+            return True, msg
+
+        except Exception as e:
+            # 未预期的异常，记录状态以便恢复
+            logger.exception(f"Unexpected error during migration of {target_id}")
+            state["phase"] = MigrationPhase.FAILED.value
+            state["error"] = f"未预期的错误: {str(e)}"
+            self._save_state(state)
+            return False, f"迁移过程中发生未预期的错误: {e}"
 
     def restore_migration(self, target_id: str, on_progress=None) -> tuple[bool, str]:
         """
@@ -711,8 +804,283 @@ class AppMigrator:
         return True, "已成功剥离所有映射关系，文件被完好无损退回了 C 盘。"
 
     # ═══════════════════════════════════════════════════════════════════════
-    # 增量监控功能
+    # 断点恢复功能
     # ═══════════════════════════════════════════════════════════════════════
+
+    def recover_interrupted_migration(self, target_id: str, on_progress=None) -> tuple[bool, str]:
+        """
+        恢复中断的迁移任务
+
+        Args:
+            target_id: 要恢复的目标 ID
+            on_progress: 进度回调
+
+        Returns:
+            (success, message)
+        """
+        state = self._load_state(target_id)
+        if not state:
+            return False, "未找到中断的迁移记录"
+
+        phase = state.get("phase")
+        src_path = Path(state.get("src_path", ""))
+        dest_path = Path(state.get("dest_path", ""))
+        dest_drive = state.get("dest_drive", "")
+        total_size = state.get("total_size", 0)
+        moved_items = state.get("moved_items", [])
+
+        target = next((t for t in APP_TARGETS if t.id == target_id), None)
+        if not target:
+            return False, f"未识别的目标 ID: {target_id}"
+
+        # 根据阶段执行恢复
+        if phase == MigrationPhase.PREFLIGHT.value:
+            # 预检阶段中断，重新开始
+            return self.execute_migration(target_id, dest_drive, on_progress)
+
+        elif phase == MigrationPhase.COPYING.value:
+            # 复制阶段中断，继续复制剩余文件
+            logger.info(f"Recovering migration from COPYING phase, {len(moved_items)} items already moved")
+
+            if not dest_path.exists():
+                return False, "目标目录不存在，无法恢复"
+
+            # 获取剩余未复制的文件
+            try:
+                remaining_items = [item for item in os.listdir(src_path) if item not in moved_items]
+            except Exception as e:
+                return False, f"无法读取源目录: {e}"
+
+            # 更新状态为恢复中
+            state["phase"] = "recovering"
+            self._save_state(state)
+
+            moved_size = 0
+            # 计算已移动的大小
+            for item in moved_items:
+                try:
+                    item_path = dest_path / item
+                    if item_path.exists():
+                        moved_size += self._get_item_size(item_path)
+                except Exception:
+                    pass
+
+            # 继续移动剩余文件
+            for item in remaining_items:
+                s = src_path / item
+                d = dest_path / item
+
+                if on_progress:
+                    on_progress(moved_size, total_size, item)
+
+                try:
+                    if s.is_dir():
+                        shutil.move(str(s), str(d))
+                    else:
+                        shutil.move(str(s), str(d))
+
+                    state["moved_items"].append(item)
+                    moved_size += self._get_item_size(d)
+                    state["current_moved_size"] = moved_size
+                    self._save_state(state)
+
+                except Exception as e:
+                    logger.warning(f"Skipping unmovable item {s}: {e}")
+                    state["failed_items"] = state.get("failed_items", []) + [item]
+                    self._save_state(state)
+                    continue
+
+            # 继续后续阶段
+            return self._continue_migration_after_copy(state, target, src_path, dest_path, total_size, on_progress)
+
+        elif phase == MigrationPhase.VERIFYING.value:
+            # 验证阶段中断，重新验证
+            logger.info("Recovering migration from VERIFYING phase")
+            return self._continue_migration_after_copy(state, target, src_path, dest_path, total_size, on_progress)
+
+        elif phase == MigrationPhase.CREATING_JUNCTION.value:
+            # Junction 创建阶段中断，只需创建 Junction
+            logger.info("Recovering migration from CREATING_JUNCTION phase")
+
+            # 检查目标目录是否存在且有内容
+            if not dest_path.exists() or not any(dest_path.iterdir()):
+                return False, "目标目录不存在或为空，无法恢复"
+
+            # 检查源目录是否需要删除
+            if src_path.exists():
+                try:
+                    shutil.rmtree(str(src_path), ignore_errors=True)
+                except Exception as e:
+                    return False, f"无法删除源目录: {e}"
+
+            # 创建 Junction
+            try:
+                subprocess.run(
+                    ["mklink", "/J", str(src_path), str(dest_path)],
+                    shell=True,
+                    capture_output=True,
+                    check=True
+                )
+            except subprocess.CalledProcessError as e:
+                return False, f"Junction 创建失败: {e.stderr if hasattr(e, 'stderr') else str(e)}"
+
+            # 完成
+            state["phase"] = MigrationPhase.COMPLETED.value
+            state["end_time"] = datetime.now().isoformat()
+            self._save_state(state)
+
+            # 写入历史
+            history = self.get_history()
+            history.append({
+                "target_id": target.id,
+                "target_name": target.name,
+                "migrated_at": datetime.now().isoformat(),
+                "original_path": str(src_path),
+                "dest_path": str(dest_path),
+                "size_bytes": total_size,
+                "last_check_time": datetime.now().isoformat(),
+                "last_size": total_size,
+            })
+            self._save_history(history)
+
+            self._clear_state(target.id)
+
+            return True, "迁移已成功恢复并完成！"
+
+        else:
+            return False, f"无法恢复的阶段: {phase}"
+
+    def _continue_migration_after_copy(self, state: dict, target, src_path: Path, dest_path: Path,
+                                        total_size: int, on_progress=None) -> tuple[bool, str]:
+        """复制完成后继续迁移流程"""
+        # 验证阶段
+        state["phase"] = MigrationPhase.VERIFYING.value
+        self._save_state(state)
+
+        if not any(dest_path.iterdir()):
+            state["phase"] = MigrationPhase.FAILED.value
+            state["error"] = "目标目录为空"
+            self._save_state(state)
+            return False, "目标目录为空，迁移可能失败"
+
+        # 创建 Junction 阶段
+        state["phase"] = MigrationPhase.CREATING_JUNCTION.value
+        self._save_state(state)
+
+        try:
+            if src_path.exists():
+                shutil.rmtree(str(src_path), ignore_errors=True)
+
+            if src_path.exists():
+                state["phase"] = MigrationPhase.FAILED.value
+                state["error"] = "源目录清理失败"
+                self._save_state(state)
+                return False, "源目录清理失败，无法创建 Junction"
+
+            subprocess.run(
+                ["mklink", "/J", str(src_path), str(dest_path)],
+                shell=True,
+                capture_output=True,
+                check=True
+            )
+        except subprocess.CalledProcessError as e:
+            state["phase"] = MigrationPhase.FAILED.value
+            state["error"] = "Junction 创建失败"
+            self._save_state(state)
+            return False, "底层跨盘映射构建失败"
+
+        # 完成
+        state["phase"] = MigrationPhase.COMPLETED.value
+        state["end_time"] = datetime.now().isoformat()
+        self._save_state(state)
+
+        history = self.get_history()
+        history.append({
+            "target_id": target.id,
+            "target_name": target.name,
+            "migrated_at": datetime.now().isoformat(),
+            "original_path": str(src_path),
+            "dest_path": str(dest_path),
+            "size_bytes": total_size,
+            "last_check_time": datetime.now().isoformat(),
+            "last_size": total_size,
+        })
+        self._save_history(history)
+
+        self._clear_state(target.id)
+
+        return True, "迁移已成功恢复并完成！"
+
+    def rollback_interrupted_migration(self, target_id: str) -> tuple[bool, str]:
+        """
+        回滚中断的迁移（将目标盘的数据移回源目录）
+
+        Args:
+            target_id: 要回滚的目标 ID
+
+        Returns:
+            (success, message)
+        """
+        state = self._load_state(target_id)
+        if not state:
+            return False, "未找到中断的迁移记录"
+
+        src_path = Path(state.get("src_path", ""))
+        dest_path = Path(state.get("dest_path", ""))
+
+        if not dest_path.exists():
+            self._clear_state(target_id)
+            return True, "目标目录不存在，已清理状态文件"
+
+        # 如果源目录存在且不为空，需要先处理
+        if src_path.exists() and any(src_path.iterdir()):
+            return False, "源目录仍有内容，无法自动回滚。请手动处理。"
+
+        # 将目标目录的文件移回源目录
+        try:
+            os.makedirs(src_path, exist_ok=True)
+        except Exception as e:
+            return False, f"无法创建源目录: {e}"
+
+        moved_count = 0
+        failed_items = []
+
+        for item in os.listdir(dest_path):
+            s = dest_path / item
+            d = src_path / item
+            try:
+                shutil.move(str(s), str(d))
+                moved_count += 1
+            except Exception as e:
+                logger.warning(f"Failed to rollback item {s}: {e}")
+                failed_items.append(item)
+
+        # 清理
+        if not failed_items:
+            shutil.rmtree(dest_path, ignore_errors=True)
+
+        self._clear_state(target_id)
+
+        if failed_items:
+            return True, f"已部分回滚，{moved_count} 个文件已移回，{len(failed_items)} 个失败"
+        return True, f"已成功回滚，{moved_count} 个文件已移回原位置"
+
+    def _get_item_size(self, path: Path) -> int:
+        """获取文件或目录的大小"""
+        try:
+            if path.is_file():
+                return path.stat().st_size
+            elif path.is_dir():
+                total = 0
+                for root, dirs, files in os.walk(path):
+                    for f in files:
+                        fp = os.path.join(root, f)
+                        if not os.path.islink(fp):
+                            total += os.path.getsize(fp)
+                return total
+        except Exception:
+            pass
+        return 0
 
     def check_incremental_growth(self, target_id: str = None) -> list[dict]:
         """

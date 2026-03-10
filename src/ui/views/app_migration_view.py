@@ -75,7 +75,13 @@ class AppMigrationView(ft.Column):
 
             cards = []
 
-            # --- 增量增长提醒卡片 (置顶) ---
+            # --- 中断迁移恢复提醒 (最高优先级) ---
+            interrupted = self.migrator.check_interrupted_migrations()
+            if interrupted:
+                for item in interrupted:
+                    cards.append(self._build_interrupted_alert_card(item))
+
+            # --- 增量增长提醒卡片 (次优先级) ---
             growth_items = self.migrator.check_incremental_growth()
             if growth_items:
                 for item in growth_items:
@@ -113,6 +119,142 @@ class AppMigrationView(ft.Column):
             self.app.page.run_task(_gui_update)
 
         threading.Thread(target=_task, daemon=True).start()
+
+    def _build_interrupted_alert_card(self, item: dict):
+        """构建中断迁移恢复提醒卡片"""
+        phase_names = {
+            "preflight": "预检阶段",
+            "copying": "复制文件阶段",
+            "verifying": "验证阶段",
+            "creating_junction": "创建链接阶段",
+        }
+        phase_name = phase_names.get(item.get("phase"), item.get("phase", "未知"))
+        moved_count = len(item.get("moved_items", []))
+        start_time = item.get("start_time", "未知时间")
+
+        # 根据是否可恢复决定按钮
+        if item.get("can_recover"):
+            actions = ft.Row([
+                ft.TextButton(
+                    "放弃并回滚",
+                    on_click=lambda _, tid=item['target_id']: self._on_rollback_interrupted(tid),
+                    style=ft.ButtonStyle(color=ft.colors.RED_400)
+                ),
+                ft.ElevatedButton(
+                    "恢复迁移",
+                    icon=ft.icons.RESTORE,
+                    on_click=lambda _, tid=item['target_id']: self._on_recover_interrupted(tid),
+                    style=ft.ButtonStyle(color="white", bgcolor=ft.colors.RED_600),
+                ),
+            ], spacing=10)
+        else:
+            actions = ft.Row([
+                ft.TextButton(
+                    "清除状态",
+                    on_click=lambda _, tid=item['target_id']: self._on_clear_interrupted_state(tid),
+                    style=ft.ButtonStyle(color=COLOR_ZEN_TEXT_DIM)
+                ),
+            ], spacing=10)
+
+        return ft.Container(
+            col=12,
+            padding=20,
+            border_radius=15,
+            bgcolor=ft.colors.with_opacity(0.15, ft.colors.RED_800),
+            border=ft.border.all(2, ft.colors.RED_600),
+            content=ft.Row([
+                ft.Icon(ft.icons.ERROR_OUTLINE, color=ft.colors.RED_400, size=32),
+                ft.Column([
+                    ft.Row([
+                        ft.Text("⚠️ 发现中断的迁移任务", size=16, weight=ft.FontWeight.W_800, color=ft.colors.RED_300),
+                        ft.Container(
+                            content=ft.Text("需要处理", size=10, color="white"),
+                            bgcolor=ft.colors.RED_600,
+                            border_radius=4,
+                            padding=ft.padding.only(left=6, right=6, top=2, bottom=2),
+                        ),
+                    ], spacing=8),
+                    ft.Text(f"{item['target_name']} - {phase_name}", size=13, color=COLOR_ZEN_TEXT_MAIN),
+                    ft.Text(f"已迁移 {moved_count} 个项目 · 开始于 {start_time[:19] if len(start_time) > 19 else start_time}", size=11, color=COLOR_ZEN_TEXT_DIM),
+                    ft.Text(item.get("recovery_hint", ""), size=11, color=ft.colors.AMBER_300, italic=True),
+                ], expand=True, spacing=2),
+                actions,
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+        )
+
+    def _on_recover_interrupted(self, target_id: str):
+        """恢复中断的迁移"""
+        def _do_recover(e):
+            self.app.page.dialog.open = False
+            self.app.page.update()
+
+            self.pb = ft.ProgressBar(width=400, color=ft.colors.RED_400, bgcolor="#EEEEEE")
+            self.pb_text = ft.Text("正在恢复迁移...", size=12, color=COLOR_ZEN_TEXT_DIM)
+
+            self.app.page.dialog = ft.AlertDialog(
+                modal=True,
+                title=ft.Text("恢复迁移中"),
+                content=ft.Column([self.pb, self.pb_text], tight=True, spacing=10),
+            )
+            self.app.page.dialog.open = True
+            self.app.page.update()
+
+            def _task():
+                def _progress_cb(moved, total, item_name):
+                    pct = moved / total if total > 0 else 0
+                    def _update_ui():
+                        self.pb.value = pct
+                        self.pb_text.value = f"正在处理: {item_name} ({pct*100:.1f}%)"
+                        self.app.page.update()
+                    self.app.page.run_task(_update_ui)
+
+                ok, msg = self.migrator.recover_interrupted_migration(target_id, on_progress=_progress_cb)
+
+                def _finish():
+                    self.app.page.dialog.open = False
+                    self.app.show_snack_bar(msg, is_error=not ok)
+                    self.load_data()
+                self.app.page.run_task(_finish)
+
+            threading.Thread(target=_task, daemon=True).start()
+
+        self.app.page.dialog = ft.AlertDialog(
+            title=ft.Text("确认恢复迁移？"),
+            content=ft.Text("将从上次中断的位置继续迁移操作。"),
+            actions=[
+                ft.TextButton("取消", on_click=lambda _: [setattr(self.app.page.dialog, 'open', False), self.app.page.update()]),
+                ft.ElevatedButton("开始恢复", on_click=_do_recover, bgcolor=ft.colors.RED_600, color="white"),
+            ]
+        )
+        self.app.page.dialog.open = True
+        self.app.page.update()
+
+    def _on_rollback_interrupted(self, target_id: str):
+        """回滚中断的迁移"""
+        def _do_rollback(e):
+            self.app.page.dialog.open = False
+            self.app.page.update()
+
+            ok, msg = self.migrator.rollback_interrupted_migration(target_id)
+            self.app.show_snack_bar(msg, is_error=not ok)
+            self.load_data()
+
+        self.app.page.dialog = ft.AlertDialog(
+            title=ft.Row([ft.Icon(ft.icons.WARNING, color=ft.colors.RED_400), ft.Text("确认回滚？")]),
+            content=ft.Text("这将把已迁移到目标盘的数据移回原位置，并清除中断状态。"),
+            actions=[
+                ft.TextButton("取消", on_click=lambda _: [setattr(self.app.page.dialog, 'open', False), self.app.page.update()]),
+                ft.ElevatedButton("确认回滚", on_click=_do_rollback, bgcolor=ft.colors.RED_600, color="white"),
+            ]
+        )
+        self.app.page.dialog.open = True
+        self.app.page.update()
+
+    def _on_clear_interrupted_state(self, target_id: str):
+        """清除中断状态（不可恢复时）"""
+        self.migrator._clear_state(target_id)
+        self.app.show_snack_bar("已清除中断状态")
+        self.load_data()
 
     def _build_growth_alert_card(self, growth_item: dict):
         """构建增量增长提醒卡片"""
