@@ -327,8 +327,14 @@ def get_quota() -> dict | None:
             data = res.json()
             if data.get("success"):
                 return data.get("quota")
+            else:
+                logger.warning(f"AI 额度查询接口返回业务失败: {data.get('msg')}")
+        else:
+            logger.warning(f"AI 额度查询 HTTP 失败: {res.status_code}, URL: {AI_QUOTA_URL}")
+    except requests.exceptions.Timeout:
+        logger.warning("AI 额度查询请求超时")
     except Exception as e:
-        logger.debug(f"查询 AI 额度失败: {e}")
+        logger.error(f"查询 AI 额度时发生未预料异常: {e}")
 
     return None
 

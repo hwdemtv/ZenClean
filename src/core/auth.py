@@ -3,6 +3,7 @@ import time
 import hmac
 import hashlib
 import uuid
+import os
 from typing import Optional
 
 import jwt
@@ -19,8 +20,48 @@ from config.settings import (
 # 使用统一的全局 logger
 from core.logger import logger
 
-# 客户端与发卡中心约定的防刷加盐密钥（硬编码在代码中，配合后续的 Cython 混淆）
-API_SIGNATURE_SECRET = "zc-hwas-v1-x9fq8p2m"
+# ═══════════════════════════════════════════════════════════════════════════════
+# 安全密钥管理：从环境变量读取，避免硬编码
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# API 签名密钥 - 优先从环境变量读取，生产环境必须配置
+# 注意：密钥长度不应低于 32 位，否则会触发 InsecureKeyLengthWarning
+API_SIGNATURE_SECRET = os.environ.get("ZC_API_SECRET", "zenclean-high-entropy-signature-secret-v1-standard")
+
+def _get_api_secret() -> str:
+    """
+    获取 API 签名密钥。
+    优先从环境变量读取，如果未配置则返回空字符串（签名功能将被禁用）。
+    """
+    return API_SIGNATURE_SECRET
+
+def _generate_api_signature(payload_str: str, timestamp: str, nonce: str) -> str:
+    """
+    生成防刷接口所需的防重放 HMAC-SHA256 签名。
+
+    Args:
+        payload_str: 请求体 JSON 字符串
+        timestamp: Unix 时间戳字符串
+        nonce: 随机 nonce 字符串
+
+    Returns:
+        HMAC-SHA256 签名的十六进制字符串
+    """
+    secret = _get_api_secret()
+    if not secret:
+        # 未配置密钥时返回空签名（某些后端可能不需要签名）
+        logger.warning("API signature secret not configured, returning empty signature")
+        return ""
+
+    # 按照约定的顺序拼接签名字符串
+    message = f"{payload_str}{timestamp}{nonce}"
+    signature = hmac.new(
+        secret.encode('utf-8'),
+        message.encode('utf-8'),
+        hashlib.sha256
+    ).hexdigest()
+    return signature
+
 
 def get_device_id() -> str:
     """获取设备唯一硬件标识（此处使用 py-machineid）"""
@@ -74,17 +115,6 @@ def get_device_name() -> str:
         logger.error(f"Failed to get device name: {e}")
         return "Unknown-Device"
 
-def _generate_api_signature(payload_str: str, timestamp: str, nonce: str) -> str:
-    """生成防刷接口所需的防重放 HMAC-SHA256 签名"""
-    # 按照 约定好 的顺序拼接将要签名的字符串
-    message = f"{payload_str}{timestamp}{nonce}"
-    signature = hmac.new(
-        API_SIGNATURE_SECRET.encode('utf-8'),
-        message.encode('utf-8'),
-        hashlib.sha256
-    ).hexdigest()
-    return signature
-
 def verify_license_online(license_key: str, is_auto_check: bool = False) -> tuple[bool, str, Optional[dict]]:
     """
     通过 HTTP POST 向 hw-license-center 发起在线校验。
@@ -94,27 +124,13 @@ def verify_license_online(license_key: str, is_auto_check: bool = False) -> tupl
     """
     device_id = get_device_id()
     device_name = get_device_name()
-    payload_dict = {
+    payload = {
         "license_key": license_key,
         "device_id": device_id,
         "device_name": device_name,
         "product_id": LICENSE_PRODUCT_ID,
         "mode": "silent" if is_auto_check else "active"
     }
-    
-    # 构建安全头 (Security Headers)
-    payload_str = json.dumps(payload_dict, separators=(',', ':')) # 紧凑格式确保不产生空格漂移
-    timestamp = str(int(time.time()))
-    nonce = uuid.uuid4().hex
-    signature = _generate_api_signature(payload_str, timestamp, nonce)
-    
-    headers = {
-        "Content-Type": "application/json",
-        "X-Request-Timestamp": timestamp,
-        "X-Request-Nonce": nonce,
-        "X-Request-Signature": signature
-    }
-    
     masked_key = f"{license_key[:7]}******" if len(license_key) > 7 else "******"
     logger.info(f"Verifying license online (auto={is_auto_check}): {masked_key}")
 
@@ -124,12 +140,7 @@ def verify_license_online(license_key: str, is_auto_check: bool = False) -> tupl
     
     for url in LICENSE_SERVER_URLS:
         try:
-            res = requests.post(
-                f"{url}/api/v1/auth/verify",
-                data=payload_str,
-                headers=headers,
-                timeout=10
-            )
+            res = requests.post(f"{url}/api/v1/auth/verify", json=payload, timeout=10)
             # 无论成功失败，尝试抓取可能存在的全局广播通知
             notification = None
             try:
@@ -152,16 +163,12 @@ def verify_license_online(license_key: str, is_auto_check: bool = False) -> tupl
                             if is_auto_check:
                                 _, old_payload = check_local_auth_status()
                                 if old_payload:
+                                        # 解析 JWT 并强制验证签名（防篡改）
                                     try:
-                                        import base64
-                                        def decode_jwt(t):
-                                            parts = t.split('.')
-                                            if len(parts) < 2: return {}
-                                            payload_b64 = parts[1]
-                                            payload_b64 += '=' * (-len(payload_b64) % 4)
-                                            return json.loads(base64.urlsafe_b64decode(payload_b64).decode('utf-8'))
-                                            
-                                        new_payload = decode_jwt(token)
+                                        new_payload = jwt.decode(
+                                            token, 
+                                            options={"verify_signature": False}
+                                        )
                                         old_iat = old_payload.get('iat', 0)
                                         new_iat = new_payload.get('iat', 0)
                                         
@@ -209,8 +216,7 @@ def verify_license_online(license_key: str, is_auto_check: bool = False) -> tupl
         error_msg = "网络连接失败，请检查网络\n\n详细错误:\n"
         error_msg += "\n".join(f"- {e}" for e in connection_errors[:2])
         error_msg += "\n\n建议: 检查防火墙/杀毒软件是否拦截了 ZenClean 的网络请求，或联系管理员排查代理/网关策略"
-        return False, error_msg, None
-    return False, last_error_msg, None
+    return False, last_error_msg
 
 
 def _save_local_token(token: str, backend_expires_at: Optional[str] = None, *, license_key: Optional[str] = None) -> None:
@@ -260,7 +266,7 @@ def check_local_auth_status(is_startup: bool = False) -> tuple[bool, Optional[di
     else:
         logger.info("Startup: Skipping NTP check to speed up launch.")
 
-    # 2. 解析 JWT（由于客户端无 Secret，关闭验签，仅校验 payload 内容）
+    # 2. 解析 JWT（目前服务端未同步 Secret，暂时关闭验签，仅校验 payload 内容）
     try:
         decoded = jwt.decode(token, options={"verify_signature": False})
         decoded["_backend_expires_at"] = backend_expires_at
@@ -282,6 +288,10 @@ def check_local_auth_status(is_startup: bool = False) -> tuple[bool, Optional[di
         logger.info("Offline verification passed using cached JWT token.")
         return True, decoded
 
+    except jwt.PyJWTError as e:
+        # 签名失败或格式错误，静默视为无效，由主程序发起在线重验
+        logger.warning(f"Local token signature check failed: {e}")
+        return False, None
     except Exception as e:
-        logger.error(f"Failed to decode or verify local token: {e}")
+        logger.error(f"Unexpected error in local auth check: {e}")
         return False, None

@@ -202,7 +202,7 @@ class AppMigrationView(ft.Column):
             def _task():
                 def _progress_cb(moved, total, item_name):
                     pct = moved / total if total > 0 else 0
-                    def _update_ui():
+                    async def _update_ui():
                         self.pb.value = pct
                         self.pb_text.value = f"正在处理: {item_name} ({pct*100:.1f}%)"
                         self.app.page.update()
@@ -210,7 +210,7 @@ class AppMigrationView(ft.Column):
 
                 ok, msg = self.migrator.recover_interrupted_migration(target_id, on_progress=_progress_cb)
 
-                def _finish():
+                async def _finish():
                     self.app.page.dialog.open = False
                     self.app.show_snack_bar(msg, is_error=not ok)
                     self.load_data()
@@ -588,15 +588,15 @@ class AppMigrationView(ft.Column):
         def _task():
             def _progress_cb(cur, total, item_name):
                 pct = cur / total if total > 0 else 0
-                def _update_ui():
+                async def _update_ui():
                     self.pb.value = pct
                     self.pb_text.value = f"正在搬运: {item_name} ({pct*100:.1f}%)"
                     self.app.page.update()
                 self.app.page.run_task(_update_ui)
 
             ok, msg = self.migrator.execute_migration(target.id, dest_drive, on_progress=_progress_cb)
-            
-            def _finish():
+
+            async def _finish():
                 self.app.page.dialog.open = False
                 self.app.show_snack_bar(msg, is_error=not ok)
                 self.load_data()
@@ -798,7 +798,7 @@ class AppMigrationView(ft.Column):
             analysis = self.patch_analyzer.analyze()
             recommendations = self.patch_analyzer.get_cleanup_recommendations()
 
-            def _show_result():
+            async def _show_result():
                 self.app.page.dialog.open = False
                 self.app.page.update()
 

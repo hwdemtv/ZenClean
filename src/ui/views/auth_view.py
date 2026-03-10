@@ -176,14 +176,14 @@ class AuthView(ft.Column):
                 self._diag_button,
                 ft.Container(height=5),
                 submit_btn,
-            ], spacing=10)
+            ], spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
 
         super().__init__(
             controls=[
                 ft.Column([
                     ft.Text("激活 ZenClean VIP 特权", size=22, weight=ft.FontWeight.BOLD, color=COLOR_ZEN_TEXT_MAIN),
                     ft.Text("输入激活码以解锁本地 AI 高级扫描与一键清除能力。", color=COLOR_ZEN_TEXT_DIM, size=13),
-                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER if self.app.is_activated else ft.CrossAxisAlignment.START),
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                 ft.Container(height=10),
                 content_col,
             ],

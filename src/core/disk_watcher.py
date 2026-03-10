@@ -69,15 +69,46 @@ def check_disk(drive: str = _CHECK_DRIVE, threshold: int | None = None) -> tuple
     return usage_percent >= threshold, round(usage_percent, 1), round(free_gb, 1)
 
 
+def _escape_xml(text: str) -> str:
+    """
+    转义 XML 特殊字符，防止注入攻击。
+
+    Args:
+        text: 原始文本
+
+    Returns:
+        转义后的安全文本
+    """
+    if not text:
+        return ""
+    return (text
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#39;")
+        .replace("\n", "&#10;")
+        .replace("\r", "&#13;"))
+
+
 def send_toast(title: str, message: str) -> bool:
     """
     通过 PowerShell 弹出 Windows 原生 Toast 通知。
     不依赖任何第三方库。
-    
+
+    Args:
+        title: 通知标题（会被转义以防注入）
+        message: 通知内容（会被转义以防注入）
+
     Returns:
         是否成功发送
     """
-    # 使用 PowerShell 的 BurntToast 或原生 .NET 通知
+    # 安全转义：防止 XML/PowerShell 注入攻击
+    safe_title = _escape_xml(str(title))[:100]  # 限制长度
+    safe_message = _escape_xml(str(message))[:200]  # 限制长度
+
+    # 使用 PowerShell 的原生 .NET 通知
+    # 注意：所有动态内容已通过 XML 实体编码转义
     ps_script = f'''
     [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
     [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom, ContentType = WindowsRuntime] | Out-Null
@@ -86,8 +117,8 @@ def send_toast(title: str, message: str) -> bool:
     <toast>
         <visual>
             <binding template="ToastGeneric">
-                <text>{title}</text>
-                <text>{message}</text>
+                <text>{safe_title}</text>
+                <text>{safe_message}</text>
             </binding>
         </visual>
     </toast>
@@ -98,7 +129,7 @@ def send_toast(title: str, message: str) -> bool:
     $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
     [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("ZenClean").Show($toast)
     '''
-    
+
     try:
         result = subprocess.run(
             ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
@@ -108,8 +139,10 @@ def send_toast(title: str, message: str) -> bool:
     except Exception:
         # 降级方案：使用 msg 命令（更简单但不够美观）
         try:
+            # msg 命令也需要转义
+            safe_msg = f"{safe_title}\n{safe_message}".replace('"', '')
             subprocess.run(
-                ["msg", "*", f"{title}\n{message}"],
+                ["msg", "*", safe_msg],
                 capture_output=True, timeout=5, creationflags=subprocess.CREATE_NO_WINDOW
             )
             return True

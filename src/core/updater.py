@@ -16,25 +16,38 @@ def check_for_updates(on_result, manual=False):
             # 优先尝试从咱们的商业授权网关获取更新通知 (方案二)
             if LICENSE_SERVER_URLS:
                 base_url = LICENSE_SERVER_URLS[0].rstrip("/")
-                update_api = f"{base_url}/api/v1/update?product=zenclean&version={APP_VERSION}"
-                logger.info("[Updater] 正在检查商业网关更新...")
-                try:
-                    res = requests.get(update_api, timeout=5)
-                    if res.status_code == 200:
-                        data = res.json()
-                        # 假设后端返回 {"code": 200, "data": {"has_update": true, "version": "v0.2.0", "url": "...", "desc": "..."}}
-                        if data.get("code") == 200 and data.get("data"):
-                            d = data["data"]
-                            if d.get("has_update") and d.get("version") != APP_VERSION:
-                                on_result(True, d.get("version"), d.get("url") or FALLBACK_DOWNLOAD_URL, d.get("desc", "发现新版本！"))
-                                return
-                            elif manual:
-                                on_result(False, APP_VERSION, "", "恭喜，当前已是最新版本。")
-                                return
-                    else:
-                        logger.info(f"[Updater] 商业网关返回状态: {res.status_code}")
-                except Exception as e:
-                    logger.warning(f"[Updater] 商业网关检查失败: {type(e).__name__}")
+                # 修正路径：服务端 publicRoutes 挂载在 /api/v1/auth 下，对应的更新接口应当是 /auth/update
+                update_api = f"{base_url}/api/v1/auth/update?product=zenclean&version={APP_VERSION}"
+                # 尝试 2 次重试机制以应对瞬时网络抖动 (如 502/504)
+                max_retries = 2
+                for attempt in range(max_retries):
+                    try:
+                        # 缩短超时时间，网关抖动时快速失败并切镜像
+                        res = requests.get(update_api, timeout=3)
+                        if res.status_code == 200:
+                            data = res.json()
+                            if data.get("code") == 200 and data.get("data"):
+                                d = data["data"]
+                                if d.get("has_update") and d.get("version") != APP_VERSION:
+                                    on_result(True, d.get("version"), d.get("url") or FALLBACK_DOWNLOAD_URL, d.get("desc", "发现新版本！"))
+                                    return
+                                elif manual:
+                                    on_result(False, APP_VERSION, "", "恭喜，当前已是最新版本。")
+                                    return
+                            break # code 不对，不再重试
+                        elif 400 <= res.status_code <= 599:
+                            # 如果是 4xx 或 5xx 错误，说明服务端该端点不可用，直接中断重试进入镜像降级流程
+                            logger.info(f"[Updater] 商业网关响应异常 ({res.status_code})，将尝试镜像源...")
+                            break
+                        else:
+                            logger.info(f"[Updater] 商业网关返回状态: {res.status_code}, 停止重试。")
+                            break
+                    except (requests.Timeout, requests.ConnectionError):
+                        logger.warning(f"[Updater] 商业网关请求超时/连接失败 ({attempt+1}/{max_retries})")
+                        if attempt == max_retries - 1: break
+                    except Exception as e:
+                        logger.warning(f"[Updater] 商业网关请求异常: {type(e).__name__}")
+                        break
 
             # 降级：如果商业网关未配置或失败，尝试多重镜像轮询 (GitHub Releases)
             # 方案优化：改用 /releases 列表接口，以支持获取最新的 Pre-release 版本 (Beta 版常用)

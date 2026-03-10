@@ -600,16 +600,20 @@ class ScanView(ft.Column):
                 import asyncio
                 # 把同步请求交由线程池以免阻塞 UI 渲染
                 quota = await asyncio.to_thread(get_quota)
-                if quota and getattr(self, "_quota_label", None):
+                if not getattr(self, "_quota_label", None): return
+                
+                if quota:
                     used = quota.get('used_today', 0)
                     limit = quota.get('daily_limit', 0)
                     self._quota_label.value = f"{used} / {limit}"
-                    self._quota_label.size = 14
-                    self._quota_label.font_family = "Consolas"
-                    self._quota_label.weight = ft.FontWeight.W_800
                     self._quota_label.color = COLOR_ZEN_PRIMARY
-                    if self.page:
-                        self.update()
+                else:
+                    # 如果获取失败，显示温和的提示
+                    self._quota_label.value = "未对齐"
+                    self._quota_label.color = ft.colors.with_opacity(0.4, COLOR_ZEN_PRIMARY)
+                
+                if self.page:
+                    self.update()
             
             self.app.page.run_task(_fetch_quota)
 
