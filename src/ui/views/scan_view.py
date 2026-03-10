@@ -237,6 +237,7 @@ class ScanView(ft.Column):
             bgcolor=ft.colors.with_opacity(0.05, health_color),
             border=ft.border.only(left=ft.BorderSide(2, health_color)),
             border_radius=ft.border_radius.only(top_left=15, bottom_left=15, top_right=5, bottom_right=5),
+            tooltip="系统健康度示例：\n基于 C 盘剩余空间占比计算。\n>30%: 优 (绿色)\n10%-30%: 警告 (琥珀色)\n<10%: 危机 (朱红色)",
         )
         
         # 右侧护法：智能算力 (HUD 翼板版)
@@ -252,6 +253,7 @@ class ScanView(ft.Column):
             bgcolor=ft.colors.with_opacity(0.05, COLOR_ZEN_PRIMARY),
             border=ft.border.only(right=ft.BorderSide(2, COLOR_ZEN_PRIMARY)),
             border_radius=ft.border_radius.only(top_right=15, bottom_right=15, top_left=5, bottom_left=5),
+            tooltip="智能算力示例：\n当前已激活 VIP 享有的每日 AI 研判配额。\n每次扫描时，云端大模型将消耗算力为您分析垃圾文件的风险等级。",
         )
 
         # 组合中心护法法阵 (增加间距以释放压力)
@@ -285,7 +287,9 @@ class ScanView(ft.Column):
             padding=15, bgcolor=ft.colors.with_opacity(0.03, "onSurface"), border_radius=10, expand=True,
             border=ft.border.all(1, ft.colors.with_opacity(0.2, "primary")), ink=True,
             on_click=self._on_click_hibernation_tile,
-            on_hover=self._on_hover_tile
+            on_hover=self._on_hover_tile,
+            tooltip="休眠管理说明：\n系统休眠文件 (hiberfil.sys) 通常占用内存容量的 40%-80%。\n关闭休眠功能可瞬间释放 8GB-32GB 空间，适合不使用休眠功能的 SSD 用户。",
+            animate=ft.animation.Animation(300, "decelerate"),
         )
         
         # 2. 应用搬家
@@ -298,7 +302,9 @@ class ScanView(ft.Column):
             padding=15, bgcolor=ft.colors.with_opacity(0.03, "onSurface"), border_radius=10, expand=True,
             border=ft.border.all(1, ft.colors.with_opacity(0.2, "primary")), ink=True,
             on_click=self._on_click_migration_tile,
-            on_hover=self._on_hover_tile
+            on_hover=self._on_hover_tile,
+            tooltip="无损搬家说明：\n采用 NTFS Junction 技术将微信、Docker 等数据大户搬移至 D 盘。\n应用无需重装，原路径保持透明映射，物理占用由 C 盘转移至非系统盘。",
+            animate=ft.animation.Animation(300, "decelerate"),
         )
 
         # 3. 更新清理
@@ -311,7 +317,9 @@ class ScanView(ft.Column):
             padding=15, bgcolor=ft.colors.with_opacity(0.08, "error"), border_radius=10, expand=True,
             border=ft.border.all(1, ft.colors.with_opacity(0.3, "error")), ink=True,
             on_click=self._on_click_update_clean_tile,
-            on_hover=self._on_hover_tile
+            on_hover=self._on_hover_tile,
+            tooltip="陈年补丁说明：\n清理 $PatchCache$ 中的系统更新冗余文件。\n清理后可释放大量空间，但会导致部分已安装的系统补丁无法通过“控制面板”卸载回滚。",
+            animate=ft.animation.Animation(300, "decelerate"),
         )
 
         # 4. 虚拟内存
@@ -324,7 +332,9 @@ class ScanView(ft.Column):
             padding=15, bgcolor=ft.colors.with_opacity(0.03, "onSurface"), border_radius=10, expand=True,
             border=ft.border.all(1, ft.colors.with_opacity(0.2, "tertiary")), ink=True,
             on_click=self._on_click_virtual_mem_tile,
-            on_hover=self._on_hover_tile
+            on_hover=self._on_hover_tile,
+            tooltip="虚拟内存说明：\n调整或搬移页面文件 (pagefile.sys)。\n您可以将虚拟内存设置到非系统盘，以腾出宝贵的 C 盘空间，或根据物理内存容量进行缩减。",
+            animate=ft.animation.Animation(300, "decelerate"),
         )
 
         _advanced_row_1 = ft.Row([self._tile_hibernation, self._tile_virtual_mem], spacing=15)
@@ -988,16 +998,40 @@ class ScanView(ft.Column):
          self.app.page.update()
 
     def _on_hover_tile(self, e):
-        # 统管磁贴的悬停视觉逻辑 (机甲亮边特效)
-        base_color = e.control.border.top.color # 提取原始边框色
-        if e.data == "true": # 移入
-             e.control.border = ft.border.all(1, base_color.replace("#33", "#FF").replace("#55", "#FF"))
-             e.control.shadow = ft.BoxShadow(blur_radius=15, spread_radius=-5, color=base_color.replace("#33", "#66").replace("#55", "#88"))
-             e.control.scale = 1.02
-        else: # 移出
-             orig_prefix = "#55" if "E74C3C" in base_color else "#33"
-             e.control.border = ft.border.all(1, base_color.replace("#FF", orig_prefix))
-             e.control.shadow = None
-             e.control.scale = 1.0
+        # 统管磁贴的悬停视觉逻辑 (机甲亮边 Glow 特效)
+        is_hover = e.data == "true"
+        
+        # 提取当前边框色
+        current_border_color = e.control.border.top.color
+        
+        if is_hover:
+            # 开启高亮：提升边框亮度，注入外发光阴影
+            e.control.scale = 1.02
+            # 这里的逻辑是如果原来的颜色带透明度（如以 #33 或 #55 开头），则在悬停时去掉透明度使其更亮
+            new_color = current_border_color
+            if current_border_color.startswith("#"):
+                # 如果是带 alpha 的 8 位十六进制或带有基础透明度的 4/6 位，则强制设为不透明
+                if len(current_border_color) > 7:
+                    new_color = "#FF" + current_border_color[3:] # 强制 100% 不透明度
+                else:
+                    new_color = COLOR_ZEN_PRIMARY # 默认 fallback
+            
+            # 实现 Glow 效果
+            e.control.shadow = ft.BoxShadow(
+                blur_radius=25,
+                spread_radius=-2,
+                color=ft.colors.with_opacity(0.25, new_color),
+                offset=ft.Offset(0, 4)
+            )
+            # 动态增强边框质感
+            e.control.border = ft.border.all(1.5, ft.colors.with_opacity(0.8, new_color))
+        else:
+            # 还原态
+            e.control.scale = 1.0
+            e.control.shadow = None
+            # 还原到带透明度的极简边框 (这里根据类型还原)
+            orig_opacity = 0.3 if "error" in str(current_border_color) or "E74C3C" in str(current_border_color) else 0.2
+            e.control.border = ft.border.all(1, ft.colors.with_opacity(orig_opacity, current_border_color))
+        
         e.control.update()
 

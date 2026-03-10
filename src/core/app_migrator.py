@@ -17,6 +17,7 @@
 - 浏览器目标拆分：只迁移 Cache 子目录，保护登录状态和扩展
 - 增量监控：记录上次检查时的大小，检测数据增长并提醒
 - 进程优雅关闭：先尝试正常关闭，超时再强制终止
+- 断点恢复：原子性迁移 + 状态文件，防止中断导致数据丢失
 """
 
 import os
@@ -29,10 +30,23 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional, Callable
+from enum import Enum
 from core.logger import logger
 from config.settings import APP_DATA_DIR
 
 MIGRATION_HISTORY_FILE = os.path.join(APP_DATA_DIR, "migrations.json")
+MIGRATION_STATE_DIR = os.path.join(APP_DATA_DIR, "migration_states")
+
+
+class MigrationPhase(Enum):
+    """迁移阶段枚举"""
+    PREFLIGHT = "preflight"      # 预检阶段
+    COPYING = "copying"          # 复制文件阶段
+    VERIFYING = "verifying"      # 验证完整性阶段
+    CREATING_JUNCTION = "creating_junction"  # 创建 Junction 阶段
+    COMPLETED = "completed"      # 已完成
+    FAILED = "failed"           # 失败
+    ROLLBACK = "rollback"       # 回滚中
 
 @dataclass
 class AppTarget:
@@ -268,7 +282,9 @@ GRACEFUL_SHUTDOWN_TIMEOUT = 8  # 优雅关闭等待秒数
 class AppMigrator:
     def __init__(self):
         self.history_file = Path(MIGRATION_HISTORY_FILE)
+        self.state_dir = Path(MIGRATION_STATE_DIR)
         self._ensure_history_file()
+        self._ensure_state_dir()
 
     def _ensure_history_file(self):
         if not self.history_file.parent.exists():
@@ -276,6 +292,11 @@ class AppMigrator:
         if not self.history_file.exists():
             with open(self.history_file, 'w', encoding='utf-8') as f:
                 json.dump([], f)
+
+    def _ensure_state_dir(self):
+        """确保状态目录存在"""
+        if not self.state_dir.exists():
+            self.state_dir.mkdir(parents=True, exist_ok=True)
 
     def get_history(self) -> list[dict]:
         try:
@@ -288,6 +309,111 @@ class AppMigrator:
     def _save_history(self, history: list[dict]):
         with open(self.history_file, 'w', encoding='utf-8') as f:
             json.dump(history, f, indent=4, ensure_ascii=False)
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # 断点恢复：状态文件管理
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def _get_state_file(self, target_id: str) -> Path:
+        """获取指定目标的状态文件路径"""
+        return self.state_dir / f"{target_id}.json"
+
+    def _load_state(self, target_id: str) -> Optional[dict]:
+        """加载迁移状态"""
+        state_file = self._get_state_file(target_id)
+        if not state_file.exists():
+            return None
+        try:
+            with open(state_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to load migration state for {target_id}: {e}")
+            return None
+
+    def _save_state(self, state: dict) -> None:
+        """保存迁移状态"""
+        state_file = self._get_state_file(state["target_id"])
+        try:
+            with open(state_file, 'w', encoding='utf-8') as f:
+                json.dump(state, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"Failed to save migration state: {e}")
+
+    def _clear_state(self, target_id: str) -> None:
+        """清除迁移状态文件"""
+        state_file = self._get_state_file(target_id)
+        if state_file.exists():
+            try:
+                state_file.unlink()
+            except Exception:
+                pass
+
+    def check_interrupted_migrations(self) -> list[dict]:
+        """
+        检查是否有中断的迁移任务
+        Returns:
+            返回中断的迁移列表，每项包含 {target_id, target_name, phase, src_path, dest_path, can_recover}
+        """
+        interrupted = []
+        for state_file in self.state_dir.glob("*.json"):
+            try:
+                with open(state_file, 'r', encoding='utf-8') as f:
+                    state = json.load(f)
+
+                if state.get("phase") not in [MigrationPhase.COMPLETED.value, MigrationPhase.FAILED.value]:
+                    target_id = state.get("target_id")
+                    target = next((t for t in APP_TARGETS if t.id == target_id), None)
+
+                    # 判断是否可恢复
+                    can_recover = self._can_recover_state(state)
+
+                    interrupted.append({
+                        "target_id": target_id,
+                        "target_name": target.name if target else state.get("target_name", "未知"),
+                        "phase": state.get("phase"),
+                        "src_path": state.get("src_path"),
+                        "dest_path": state.get("dest_path"),
+                        "start_time": state.get("start_time"),
+                        "moved_items": state.get("moved_items", []),
+                        "can_recover": can_recover,
+                        "recovery_hint": self._get_recovery_hint(state),
+                    })
+            except Exception as e:
+                logger.warning(f"Failed to read state file {state_file}: {e}")
+
+        return interrupted
+
+    def _can_recover_state(self, state: dict) -> bool:
+        """判断某个状态是否可以恢复"""
+        phase = state.get("phase")
+
+        # PREFLIGHT 阶段：还没开始复制，可以直接重试
+        if phase == MigrationPhase.PREFLIGHT.value:
+            return True
+
+        # COPYING 阶段：部分文件已复制，可以继续
+        if phase == MigrationPhase.COPYING.value:
+            dest_path = Path(state.get("dest_path", ""))
+            return dest_path.exists() and any(dest_path.iterdir()) if dest_path.exists() else False
+
+        # CREATING_JUNCTION 阶段：文件已复制完成，只需创建 Junction
+        if phase == MigrationPhase.CREATING_JUNCTION.value:
+            dest_path = Path(state.get("dest_path", ""))
+            src_path = Path(state.get("src_path", ""))
+            return dest_path.exists() and src_path.exists()
+
+        return False
+
+    def _get_recovery_hint(self, state: dict) -> str:
+        """获取恢复提示"""
+        phase = state.get("phase")
+        hints = {
+            MigrationPhase.PREFLIGHT.value: "预检阶段中断，可重新开始迁移",
+            MigrationPhase.COPYING.value: f"复制阶段中断，已迁移 {len(state.get('moved_items', []))} 个项目",
+            MigrationPhase.VERIFYING.value: "验证阶段中断，建议检查数据完整性",
+            MigrationPhase.CREATING_JUNCTION.value: "文件已复制，只需创建链接即可完成",
+        }
+        return hints.get(phase, "未知状态")
 
     def is_already_migrated(self, path: Path) -> bool:
         """检查一个路径是否已经被转化为 Junction Point (通常代表已经搬过家了)"""
