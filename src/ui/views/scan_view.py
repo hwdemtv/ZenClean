@@ -289,7 +289,7 @@ class ScanView(ft.Column):
             on_click=self._on_click_hibernation_tile,
             on_hover=self._on_hover_tile,
             tooltip="休眠管理说明：\n系统休眠文件 (hiberfil.sys) 通常占用内存容量的 40%-80%。\n关闭休眠功能可瞬间释放 8GB-32GB 空间，适合不使用休眠功能的 SSD 用户。",
-            animate=ft.animation.Animation(300, "decelerate"),
+            animate_scale=300,
         )
         
         # 2. 应用搬家
@@ -304,7 +304,7 @@ class ScanView(ft.Column):
             on_click=self._on_click_migration_tile,
             on_hover=self._on_hover_tile,
             tooltip="无损搬家说明：\n采用 NTFS Junction 技术将微信、Docker 等数据大户搬移至 D 盘。\n应用无需重装，原路径保持透明映射，物理占用由 C 盘转移至非系统盘。",
-            animate=ft.animation.Animation(300, "decelerate"),
+            animate_scale=300,
         )
 
         # 3. 更新清理
@@ -319,7 +319,7 @@ class ScanView(ft.Column):
             on_click=self._on_click_update_clean_tile,
             on_hover=self._on_hover_tile,
             tooltip="陈年补丁说明：\n清理 $PatchCache$ 中的系统更新冗余文件。\n清理后可释放大量空间，但会导致部分已安装的系统补丁无法通过“控制面板”卸载回滚。",
-            animate=ft.animation.Animation(300, "decelerate"),
+            animate_scale=300,
         )
 
         # 4. 虚拟内存
@@ -334,7 +334,7 @@ class ScanView(ft.Column):
             on_click=self._on_click_virtual_mem_tile,
             on_hover=self._on_hover_tile,
             tooltip="虚拟内存说明：\n调整或搬移页面文件 (pagefile.sys)。\n您可以将虚拟内存设置到非系统盘，以腾出宝贵的 C 盘空间，或根据物理内存容量进行缩减。",
-            animate=ft.animation.Animation(300, "decelerate"),
+            animate_scale=300,
         )
 
         _advanced_row_1 = ft.Row([self._tile_hibernation, self._tile_virtual_mem], spacing=15)
