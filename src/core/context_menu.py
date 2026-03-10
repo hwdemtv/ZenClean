@@ -20,6 +20,9 @@ _REG_DIR_CMD   = r"Software\Classes\Directory\shell\ZenClean\command"
 # 同时支持文件夹背景空白处右键
 _REG_BG_SHELL  = r"Software\Classes\Directory\Background\shell\ZenClean"
 _REG_BG_CMD    = r"Software\Classes\Directory\Background\shell\ZenClean\command"
+# 新增：支持磁盘/驱动器（如直接右键 C 盘）
+_REG_DRIVE_SHELL = r"Software\Classes\Drive\shell\ZenClean"
+_REG_DRIVE_CMD   = r"Software\Classes\Drive\shell\ZenClean\command"
 
 
 def _get_exe_path() -> str:
@@ -68,6 +71,16 @@ def register() -> tuple[bool, str]:
         winreg.SetValueEx(key, "", 0, winreg.REG_SZ, command)
         winreg.CloseKey(key)
 
+        # ── 磁盘/驱动器右键菜单 ──
+        key = winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, _REG_DRIVE_SHELL, 0, winreg.KEY_WRITE)
+        winreg.SetValueEx(key, "", 0, winreg.REG_SZ, "使用 ZenClean 分析")
+        winreg.SetValueEx(key, "Icon", 0, winreg.REG_SZ, exe_path.strip('"'))
+        winreg.CloseKey(key)
+
+        key = winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, _REG_DRIVE_CMD, 0, winreg.KEY_WRITE)
+        winreg.SetValueEx(key, "", 0, winreg.REG_SZ, command)
+        winreg.CloseKey(key)
+
         logger.info("右键菜单注册成功")
         return True, "右键菜单已成功注册"
     except Exception as e:
@@ -83,7 +96,12 @@ def unregister() -> tuple[bool, str]:
         (success, message)
     """
     try:
-        for reg_path in [_REG_DIR_CMD, _REG_DIR_SHELL, _REG_BG_CMD, _REG_BG_SHELL]:
+        reg_paths = [
+            _REG_DIR_CMD, _REG_DIR_SHELL, 
+            _REG_BG_CMD, _REG_BG_SHELL,
+            _REG_DRIVE_CMD, _REG_DRIVE_SHELL
+        ]
+        for reg_path in reg_paths:
             try:
                 winreg.DeleteKey(winreg.HKEY_CURRENT_USER, reg_path)
             except FileNotFoundError:

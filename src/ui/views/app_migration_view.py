@@ -65,48 +65,96 @@ class AppMigrationView(ft.Column):
             self.app.page.overlay.append(self.file_picker)
             self._picker_added = True
             self.app.page.update()
-            
+
         self.grid.controls = [ft.Container(content=ft.ProgressRing(), alignment=ft.alignment.center, height=200, col=12)]
         self.update()
-        
+
         def _task():
             history = self.migrator.get_history()
             sys_history = self.sys_migrator.get_history()
-            
+
             cards = []
-            
+
+            # --- 增量增长提醒卡片 (置顶) ---
+            growth_items = self.migrator.check_incremental_growth()
+            if growth_items:
+                for item in growth_items:
+                    cards.append(self._build_growth_alert_card(item))
+
             # --- 系统级特权高危项 (置顶) ---
             is_sys_migrated = any(h["target_id"] == "win_installer_patch_cache" for h in sys_history)
             if not is_sys_migrated:
                 sys_card = self._build_sys_card()
                 if sys_card:
                     cards.append(sys_card)
-                    
+
             # --- 常规应用项 ---
             for target in APP_TARGETS:
                 # 检查是否已搬家
                 is_migrated = any(h["target_id"] == target.id for h in history)
                 if not is_migrated:
                     cards.append(self._build_app_card(target))
-            
+
             # 更新历史列表
             history_items = []
             if is_sys_migrated:
                 history_items.append(self._build_sys_history_item(sys_history[0]))
-                
+
             for h in history:
                 history_items.append(self._build_history_item(h))
-            
+
             async def _gui_update():
                 self.grid.controls = cards if cards else [ft.Text("所有支持的应用均已搬家或未安装。", color=COLOR_ZEN_TEXT_DIM, col=12)]
                 self.history_list.controls = history_items
                 self.history_section.visible = len(history_items) > 0
                 if self.page:
                     self.update()
-            
+
             self.app.page.run_task(_gui_update)
 
         threading.Thread(target=_task, daemon=True).start()
+
+    def _build_growth_alert_card(self, growth_item: dict):
+        """构建增量增长提醒卡片"""
+        return ft.Container(
+            col=12,
+            padding=20,
+            border_radius=15,
+            bgcolor=ft.colors.with_opacity(0.1, ft.colors.AMBER_700),
+            border=ft.border.all(1, ft.colors.AMBER_600),
+            content=ft.Row([
+                ft.Icon(ft.icons.TRENDING_UP, color=ft.colors.AMBER_400, size=30),
+                ft.Column([
+                    ft.Text(f"⚠️ {growth_item['target_name']} 数据增长提醒", size=15, weight=ft.FontWeight.W_700, color=ft.colors.AMBER_300),
+                    ft.Text(f"自上次搬家以来增长了 {growth_item['growth_gb']} GB，当前总大小 {growth_item['current_size_gb']:.2f} GB", size=12, color=COLOR_ZEN_TEXT_DIM),
+                ], expand=True, spacing=2),
+                ft.Row([
+                    ft.TextButton(
+                        "已知晓",
+                        on_click=lambda _, tid=growth_item['target_id']: self._on_growth_acknowledge(tid),
+                        style=ft.ButtonStyle(color=COLOR_ZEN_TEXT_DIM)
+                    ),
+                    ft.ElevatedButton(
+                        "再次迁移",
+                        icon=ft.icons.MOVE_DOWN,
+                        on_click=lambda _, tid=growth_item['target_id']: self._on_re_migrate_click(tid),
+                        style=ft.ButtonStyle(color="white", bgcolor=ft.colors.AMBER_600),
+                    ),
+                ], spacing=5)
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+        )
+
+    def _on_growth_acknowledge(self, target_id: str):
+        """用户确认已知晓增量增长"""
+        self.migrator.update_last_check_size(target_id)
+        self.app.show_snack_bar("已记录，下次将重新计算增量")
+        self.load_data()
+
+    def _on_re_migrate_click(self, target_id: str):
+        """点击再次迁移按钮"""
+        target = next((t for t in APP_TARGETS if t.id == target_id), None)
+        if target:
+            self._on_migrate_click(target)
 
     def _on_file_picker_result(self, e: ft.FilePickerResultEvent):
         if self.picker_context == "sys":
@@ -328,26 +376,52 @@ class AppMigrationView(ft.Column):
         if alive_procs:
             self._show_process_kill_dialog(target, alive_procs)
             return
-            
+
         # 2. 选择目标盘
         self._pick_destination_and_run(target)
 
     def _show_process_kill_dialog(self, target, alive_procs):
-        def _do_kill(e):
-            ok, msg = self.migrator.kill_target_processes(target.id)
+        """显示进程关闭对话框 - 使用优雅关闭"""
+        def _do_graceful_kill(e):
+            """优雅关闭"""
             self.app.page.dialog.open = False
             self.app.page.update()
+            self.app.show_snack_bar("正在尝试优雅关闭相关进程...")
+            ok, msg = self.migrator.kill_target_processes_gracefully(target.id)
             if ok:
                 self._pick_destination_and_run(target)
             else:
                 self.app.show_snack_bar(msg, is_error=True)
 
+        def _do_force_kill(e):
+            """强制关闭"""
+            self.app.page.dialog.open = False
+            self.app.page.update()
+            ok, msg = self.migrator.kill_target_processes(target.id)
+            if ok:
+                self._pick_destination_and_run(target)
+            else:
+                self.app.show_snack_bar(msg, is_error=True)
+
+        # 根据目标类别决定警告级别
+        is_browser = target.category == "browser_cache"
+        warning_text = "浏览器可能正在进行下载或填写表单" if is_browser else "可能有未保存的工作"
+
         self.app.page.dialog = ft.AlertDialog(
-            title=ft.Text("检测到应用正在运行"),
-            content=ft.Text(f"为了安全搬移数据，请先关闭以下进程：\n{', '.join(alive_procs)}\n\n是否尝试自动关闭？"),
+            title=ft.Row([
+                ft.Icon(ft.icons.WARNING_AMBER_ROUNDED, color=ft.colors.AMBER_400),
+                ft.Text("检测到应用正在运行", color=COLOR_ZEN_TEXT_MAIN)
+            ]),
+            content=ft.Column([
+                ft.Text(f"以下进程正在运行：{', '.join(alive_procs)}", size=13),
+                ft.Text(f"⚠️ {warning_text}，强制关闭可能导致数据丢失", size=12, color=ft.colors.AMBER_400),
+                ft.Divider(height=10, color="transparent"),
+                ft.Text("建议选择「优雅关闭」等待程序自行退出", size=12, color=COLOR_ZEN_TEXT_DIM),
+            ], tight=True, spacing=5),
             actions=[
                 ft.TextButton("手动关闭", on_click=lambda _: [setattr(self.app.page.dialog, 'open', False), self.app.page.update()]),
-                ft.ElevatedButton("自动尝试关闭", on_click=_do_kill, bgcolor=COLOR_ZEN_PRIMARY, color="white")
+                ft.OutlinedButton("强制关闭", on_click=_do_force_kill, style=ft.ButtonStyle(color=ft.colors.RED_400)),
+                ft.ElevatedButton("优雅关闭", on_click=_do_graceful_kill, bgcolor=COLOR_ZEN_PRIMARY, color="white"),
             ]
         )
         self.app.page.dialog.open = True
