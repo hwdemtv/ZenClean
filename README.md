@@ -4,7 +4,7 @@
 
 现代 Windows C 盘深度清理与极致优化工具 —— 让您的系统回归“禅”意般的纯净。
 
-[![Status](https://img.shields.io/badge/Status-v0.1.0--Beta-00C2FF?style=flat-square)](https://github.com/hwdemtv/ZenClean)
+[![Status](https://img.shields.io/badge/Status-v0.1.1--Beta-00C2FF?style=flat-square)](https://github.com/hwdemtv/ZenClean)
 [![Python](https://img.shields.io/badge/Python-3.11+-1DD1A1?style=flat-square)](https://www.python.org/)
 [![UI](https://img.shields.io/badge/UI-Flet-white?style=flat-square)](https://flet.dev/)
 
@@ -12,7 +12,8 @@
 
 - 🧼 **AI 智能深度清理**: 接入真实云端 AI 引擎，精准识别系统冗余、应用残留与无效日志，杜绝误报误删。
 - 📦 **开发环境专项优化**: 针对极客用户，一键扫描 npm/pip/VSCode 等开发链下的巨量隐藏 `.cache` 缓存。
-- � **无损空间搬家**: 核心文件夹（桌面/下载/文档等）自动重定向，支持三方应用数据基于 Junction Link 的物理迁移。
+- ⏳ **时光机隔离沙箱**: 提供 72 小时“反悔期”，支持误删文件的一键原路恢复，过期项目后台静默物理粉碎。
+- 🔄 **多实例 IPC 联动**: 支持 Windows 右键菜单深度集成，多开实例自动唤醒已运行的主程序并同步扫描路径。
 - 🛡️ **安全第一架构**: UAC 全自动提权、回收站全量容灾、Windows 内核级路径免杀白名单三重保障。
 
 ## 💡 为什么选择 ZenClean? (Philosophy)
@@ -27,7 +28,10 @@
 
 - 🏗️ **底层组件化重构**: 成功抽取 `FileListItem` 与全局 `Dialog` 体系，渲染性能提升 60%+。
 - 📐 **视觉对齐大修**: 精确对齐跨容器 UI 标题中轴线，彻底解决高 Dpi 缩放下的不对齐“强迫症”。
-- � **代码洁净度治理**: 利用 `flake8` 完成了全局无用包引用 (Unused Imports) 的“零容忍”清理。
+- 📡 **通信机制升级**: 弃用 Windows 命名管道，全面切换至 **TCP 回环 (127.0.0.1:19528)**，彻底解决管理员权限下的 IPC 通信屏障。
+- 🚀 **时光机双核驱动**: 实装了全量原路恢复引擎与后台定时静默粉碎守护线程。
+- ⚡ **性能调优**: 针对文件扫描与 UI 渲染进行了深度优化，响应速度显著提升。
+- 🧹 **代码规范化**: 遵循 PEP8 规范，提升代码可读性与可维护性。
 
 ---
 
@@ -35,15 +39,15 @@
 
 - **UI Framework**: [Flet](https://flet.dev/) (基于 Flutter 实现的 Python 声明式 UI 框架)
 - **AI Engine**: 集成智谱清言大模型，真实云端分析，支持智能风险研判。
-- **IPC Engine**: 基于 `multiprocessing` 的独立扫描子进程，绕过 GIL 限制。
+- **IPC Engine**: 基于 **TCP Loopback** 的单实例唤醒机制，支持跨权限边界的路径传递。
 - **Auth System**: 支持离线离机鉴权 + 后台 JWT 静默校验（基于 `py-machineid`）。
 
 ## � 开发路线图 (Roadmap)
 
 我们正按计划向 `v1.0` 迈进：
 
-- [ ] **阶段一 (收尾项目)**: 性能调优、代码规范化、多环境打包验证。
-- [ ] **阶段二 (深度瘦身)**: 休眠文件管理、虚拟内存引导、僵尸 `node_modules` 扫描。
+- [x] **阶段一 (核心闭环)**: 性能调优、代码规范化、多实例 IPC 唤醒、时光机隔离舱、后台静默清理。
+- [ ] **阶段二 (深度优化)**: 系统托盘驻留 (Tray)、开机自启管理、日志自动审计。
 - [ ] **阶段三 (搬家中心)**: 第三方大型应用无损迁移（基于 Junction 点）、磁盘大文件可视化看板。
 - [ ] **发布增强**: Inno Setup 自动安装向导、商用数字签名证书。
 

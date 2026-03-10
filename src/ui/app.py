@@ -17,18 +17,23 @@ from ui.views.migration_view import MigrationView
 from ui.views.auth_view import AuthView
 from ui.views.result_view import ResultView
 from ui.views.splash import SplashView
+from ui.views.quarantine_view import QuarantineView
+from ui.views.settings_view import SettingsView
+from ui.components.dialogs import show_eula_dialog
 
 class ZenCleanApp(ft.Column):
     """
     根视图管理器。负责沉浸式顶栏、侧边导航栏、页面容器、路由切换。
     """
 
-    def __init__(self, page: ft.Page):
+    def __init__(self, page: ft.Page, auto_scan_path: str = None):
         super().__init__(expand=True, spacing=0)
         self.page = page
+        self.auto_scan_path = auto_scan_path
         self.is_activated = False
         self.lease_expiry_date: Optional[str] = None
         self.total_expiry_date: Optional[str] = None
+        self._eula_accepted: Optional[bool] = None  # 本地缓存，避免 clientStorage 超时
 
         _assets_dir = page.client_storage.get("assets_dir") or ""
         _icon_img_path = os.path.join(_assets_dir, "icon.png") if _assets_dir else "icon.png"
@@ -53,7 +58,16 @@ class ZenCleanApp(ft.Column):
             padding=ft.padding.only(left=15, top=8, bottom=8, right=10),
         )
 
+        self.btn_theme_toggle = ft.IconButton(
+            icon=ft.icons.LIGHT_MODE if self.page.theme_mode == ft.ThemeMode.DARK else ft.icons.DARK_MODE,
+            icon_size=16, 
+            icon_color=COLOR_ZEN_TEXT_DIM, 
+            tooltip="切换日/夜模式",
+            on_click=self._toggle_theme_mode
+        )
+
         _window_controls = ft.Row([
+            self.btn_theme_toggle,
             ft.IconButton(ft.icons.MINIMIZE, icon_size=16, icon_color=COLOR_ZEN_TEXT_DIM, on_click=self._window_minimize),
             ft.IconButton(ft.icons.CROP_SQUARE, icon_size=16, icon_color=COLOR_ZEN_TEXT_DIM, on_click=self._window_maximize),
             ft.IconButton(ft.icons.CLOSE, icon_size=16, icon_color=COLOR_ZEN_TEXT_DIM, hover_color=ft.colors.RED_600, on_click=self._window_close),
@@ -99,6 +113,16 @@ class ZenCleanApp(ft.Column):
                     selected_icon=ft.icons.LOCAL_POLICE,
                     label="VIP 激活",
                 ),
+                ft.NavigationRailDestination(
+                    icon=ft.icons.HOURGLASS_EMPTY,
+                    selected_icon=ft.icons.HOURGLASS_FULL,
+                    label="时光机",
+                ),
+                ft.NavigationRailDestination(
+                    icon=ft.icons.SETTINGS_OUTLINED,
+                    selected_icon=ft.icons.SETTINGS,
+                    label="系统设置",
+                ),
             ],
             on_change=self._on_nav_change,
             visible=False,
@@ -125,13 +149,14 @@ class ZenCleanApp(ft.Column):
             )
         ]
 
-        # 路由表：工厂函数惰性构造，保证每次导航都能拿到最新状态
         self._route_factories = {
             "/":          lambda: SplashView(self),
             "/scan":      lambda: ScanView(self),
             "/result":    lambda: ResultView(self),
             "/migration": lambda: MigrationView(self),
             "/auth":      lambda: AuthView(self),
+            "/quarantine":lambda: QuarantineView(self),
+            "/settings":  lambda: ft.Container(content=SettingsView(self), expand=True, padding=ft.padding.only(bottom=20)),
         }
         # 缓存已构建的视图（除 /scan、/result 需每次重建以刷新激活状态）
         self._view_cache: dict[str, ft.Control] = {}
@@ -157,7 +182,7 @@ class ZenCleanApp(ft.Column):
                             ft.Text(f"系统播报：发现新版本 v{latest_version}，{msg}"),
                             ft.TextButton("立即去下载", on_click=lambda _: self.page.launch_url(url) if url else None)
                         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                        bgcolor="#252525",
+                        bgcolor="inverseSurface",
                         duration=15000,
                     )
                     self.page.snack_bar.open = True
@@ -285,7 +310,7 @@ class ZenCleanApp(ft.Column):
                             on_click=lambda _: self.page.launch_url(url)
                         ) if url else ft.Container()
                     ], alignment=ft.MainAxisAlignment.START, spacing=10),
-                    bgcolor="#2D323E", # 提升背景亮度以产生色差
+                    bgcolor="inverseSurface", # 提示信息使用反转面色材
                     duration=10000,
                     behavior=ft.SnackBarBehavior.FLOATING,
                     margin=ft.margin.only(bottom=20, left=20, right=20)
@@ -316,10 +341,8 @@ class ZenCleanApp(ft.Column):
         elif current_idx == 0:
             self.navigate_to("/scan")
 
-    # ── 导航 ──────────────────────────────────────────────────────────────────
-
     def _on_nav_change(self, e):
-        idx_to_route = {0: "/scan", 1: "/migration", 2: "/auth"}
+        idx_to_route = {0: "/scan", 1: "/migration", 2: "/auth", 3: "/quarantine", 4: "/settings"}
         self.navigate_to(idx_to_route.get(e.control.selected_index, "/scan"))
 
     def navigate_to(self, route: str) -> None:
@@ -327,8 +350,30 @@ class ZenCleanApp(ft.Column):
         if route not in self._route_factories:
             return
 
+        # ── EULA 首次启动拦截 ─────────────────────────────────────────
+        # 优先读取本地缓存，避免高频交互下 clientStorage.get 超时
+        if self._eula_accepted is None:
+            try:
+                self._eula_accepted = self.page.client_storage.get("zen_eula_accepted") or False
+            except Exception:
+                self._eula_accepted = False  # 出现通讯超时时，保守处理为 False
+
+        if route == "/scan" and not self._eula_accepted:
+            # 弹出 EULA 弹窗
+            def _on_eula_accepted():
+                self._eula_accepted = True
+                self.navigate_to("/scan")
+                
+            show_eula_dialog(self.page, on_accepted=_on_eula_accepted)
+            # 先显示导航栏等 UI 框架
+            self._nav_rail.visible = True
+            self._divider.visible = True
+            self._title_bar.visible = True
+            self.update()
+            return
+
         # 需要强制每次重建的视图（刷新动态数据或激活状态）
-        if route in ["/scan", "/result", "/auth"] or route not in self._view_cache:
+        if route in ["/scan", "/result", "/auth", "/quarantine"] or route not in self._view_cache:
             self._view_cache[route] = self._route_factories[route]()
 
         # 闪屏结束后显示导航栏与分割线
@@ -345,6 +390,26 @@ class ZenCleanApp(ft.Column):
         if hasattr(view, "start"):
             view.start()
 
+    def trigger_auto_scan(self, path: str):
+        """主实例通过 IPC 接收到扫描请求时的分发接口"""
+        import os
+        if not path or not os.path.exists(path):
+            return
+        self.auto_scan_path = path
+        # 强制重建 ScanView 以触发 did_mount 中的自动扫描消费
+        if "/scan" in self._view_cache:
+            del self._view_cache["/scan"]
+        self.navigate_to("/scan")
+        # 尝试将窗口显示并前置
+        try:
+            self.page.window.visible = True
+            self.page.window.minimized = False
+            self.page.window.to_front()
+        except Exception:
+            pass
+        self.page.update()
+
+
     def _window_minimize(self, e):
         self.page.window.minimized = True
         self.page.update()
@@ -354,10 +419,12 @@ class ZenCleanApp(ft.Column):
         self.page.update()
 
     def _window_close(self, e):
-        try:
-            if hasattr(self.page.window, "close"):
-                self.page.window.close()
-            else:
-                self.page.window.destroy()
-        except Exception:
-            self.page.window_destroy()
+        self.page.window.visible = False
+        self.page.update()
+
+    def _toggle_theme_mode(self, e):
+        new_mode = ft.ThemeMode.LIGHT if self.page.theme_mode == ft.ThemeMode.DARK else ft.ThemeMode.DARK
+        self.page.theme_mode = new_mode
+        self.page.client_storage.set("zen_theme_mode", "dark" if new_mode == ft.ThemeMode.DARK else "light")
+        self.btn_theme_toggle.icon = ft.icons.LIGHT_MODE if new_mode == ft.ThemeMode.DARK else ft.icons.DARK_MODE
+        self.page.update()

@@ -5,6 +5,7 @@ from config.settings import (
     COLOR_ZEN_BG, COLOR_ZEN_PRIMARY, WINDOW_WIDTH, WINDOW_HEIGHT
 )
 from ui.app import ZenCleanApp
+from ui.tray_manager import TrayManager
 
 # 动态获取项目根目录或打包后的临时目录
 if getattr(sys, 'frozen', False):
@@ -15,6 +16,11 @@ else:
 _ASSETS_DIR = os.path.join(_ROOT, "assets")
 _ICON_PATH = os.path.join(_ASSETS_DIR, "icon.ico")
 
+import argparse
+_parser = argparse.ArgumentParser()
+_parser.add_argument("--analyze", type=str, help="Auto analyze directory path")
+_args, _ = _parser.parse_known_args()
+_auto_scan_path = _args.analyze
 
 def main(page: ft.Page):
     # ── 0. 瞬间关闭 PyInstaller 启动闪屏 ──────────────────────────────────────
@@ -24,10 +30,40 @@ def main(page: ft.Page):
     except Exception:
         pass
 
-    # ── 1. 立即设置深色主题与背景（防止白/灰闪的最有效方案） ──────────────
-    page.theme_mode = ft.ThemeMode.DARK
-    page.bgcolor = COLOR_ZEN_BG
-    page.theme = ft.Theme(color_scheme_seed=COLOR_ZEN_PRIMARY, use_material3=True)
+    # ── 1. 原生 Flet 亮/暗动态双主题装配 ──────────────────────────────────────
+    # 夜间：护眼赛博机甲风
+    dark_scheme = ft.ColorScheme(
+        background="#13161A",
+        surface="#1C2028",
+        primary="#00BFA5",
+        secondary="#E8C361",
+        error="#EF5350",
+        outline="#242A35",
+        on_surface="#F2F5F9",
+        on_surface_variant="#A3AAB8",
+        tertiary="#FFB020"
+    )
+    # 日间：实验舱医疗风
+    light_scheme = ft.ColorScheme(
+        background="#F5F7FA",
+        surface="#FFFFFF",
+        primary="#009688",
+        secondary="#C49B27",
+        error="#D32F2F",
+        outline="#E5E8EB",
+        on_surface="#1A1F2B",
+        on_surface_variant="#6B7280",
+        tertiary="#D97706"
+    )
+    
+    # 根据本地缓存设定期望模式，默认为 DARK
+    saved_theme = page.client_storage.get("zen_theme_mode") or "dark"
+    page.theme_mode = ft.ThemeMode.DARK if saved_theme == "dark" else ft.ThemeMode.LIGHT
+    
+    page.theme = ft.Theme(color_scheme=light_scheme, use_material3=True)
+    page.dark_theme = ft.Theme(color_scheme=dark_scheme, use_material3=True)
+    
+    page.bgcolor = "background"
     page.padding = 0
 
     page.title = "禅清 (ZenClean) ：互为螺旋- C盘AI极速清理大师"
@@ -48,9 +84,60 @@ def main(page: ft.Page):
     # ── 3. 强制居中：对齐 Splash 闪屏的位置，实现视觉无缝过渡 ────────────
     page.window.center()
 
-    app = ZenCleanApp(page)
+    # 窗口事件核心监听 (劫持退出按钮)
+    def _on_window_event(e: ft.ControlEvent):
+        if e.data == "close":
+            page.window.visible = False
+            page.update()
+        
+    page.window.prevent_close = True
     # 将静态资源根目录存入 client_storage，方便跨视图稳健加载 icon/图片
     page.client_storage.set("assets_dir", _ASSETS_DIR)
+
+    app = ZenCleanApp(page, auto_scan_path=_auto_scan_path)
+    # 初始化并启动托盘服务
+    tray = TrayManager(page, app, assets_dir=_ASSETS_DIR)
+    tray.run()
+    
+    # ── 4. IPC 监听守护线程（仅主实例运行） ────────────────────────────────
+    _IPC_ADDR = ('127.0.0.1', 19528)
+    def _listen_ipc():
+        from multiprocessing.connection import Listener
+        try:
+            with Listener(_IPC_ADDR) as listener:
+                while True:
+                    try:
+                        with listener.accept() as conn:
+                            msg = conn.recv()
+                            if isinstance(msg, dict) and msg.get('action') == 'analyze':
+                                path = msg.get('path')
+                                if path and hasattr(app, "trigger_auto_scan"):
+                                    app.trigger_auto_scan(path)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    import threading
+    ipc_thread = threading.Thread(target=_listen_ipc, daemon=True)
+    ipc_thread.start()
+    
+    # ── 5. 后台静默沙箱清理守护线程 ────────────────────────────────────────
+    def _auto_clean_background():
+        import time
+        from core.quarantine import auto_clean_expired
+        from core.logger import logger
+        # 延迟 15 秒后执行，避免抢占主程序冷启动期的 CPU 和 I/O 资源
+        time.sleep(15)
+        try:
+            freed = auto_clean_expired()
+            if freed > 0:
+                logger.info(f"Background quarantine auto-clean completed, freed {freed / (1024*1024):.2f} MB")
+        except Exception as e:
+            logger.error(f"Background auto-clean failed: {e}")
+
+    clean_thread = threading.Thread(target=_auto_clean_background, daemon=True)
+    clean_thread.start()
     
     page.add(app)
     # ft.Column 不参与 Flet路由系统，直接调用自己的导航方法
@@ -66,6 +153,36 @@ if __name__ == "__main__":
 
     import ctypes
     import sys
+
+    # ── 单实例锁：防止右键菜单等场景重复启动 ──────────────────────────────
+    # 使用 Windows 命名互斥锁（Named Mutex），由内核管理，进程崩溃自动释放
+    _MUTEX_NAME = "Global\\ZenClean_SingleInstance_Mutex"
+    _mutex_handle = ctypes.windll.kernel32.CreateMutexW(None, False, _MUTEX_NAME)
+    _last_error = ctypes.windll.kernel32.GetLastError()
+    _ERROR_ALREADY_EXISTS = 183
+
+    if _last_error == _ERROR_ALREADY_EXISTS:
+        import sys as _sys
+        # 从顶层模块获取 _auto_scan_path（因为这里的代码不在函数内，当前在 __main__ 顶级域运行）
+        auto_path = getattr(_sys.modules[__name__], '_auto_scan_path', None)
+        if auto_path:
+            # 通过 TCP 本地回环发送给主实例
+            try:
+                from multiprocessing.connection import Client
+                with Client(('127.0.0.1', 19528)) as conn:
+                    conn.send({'action': 'analyze', 'path': auto_path})
+            except Exception:
+                pass # 通信失败静默退出
+            sys.exit(0)
+        else:
+            # 已有实例在运行且没有强制分析参数，正常弹出提示后退出
+            ctypes.windll.user32.MessageBoxW(
+                0,
+                "ZenClean 已在运行中。\n\n请切换到已打开的窗口继续操作。",
+                "ZenClean - 重复启动",
+                0x00000040  # MB_ICONINFORMATION
+            )
+            sys.exit(0)
 
     # ── UAC 自动提权逻辑 ──────────────────────────────────────────────────
     def is_admin():
