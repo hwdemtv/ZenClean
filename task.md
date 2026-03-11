@@ -54,3 +54,9 @@
     - [x] 高危：大厂应用无损极客搬家 (解除 Demo 设限，支持微信/Docker)
     - [x] 高危：陈年补丁粉碎 (清理 $PatchCache 等底层基建并重构 UI)
 - [ ] 验证与联合测试
+- [ ] 🚀 ZenClean v1.5/v2.0 深度加固专项
+    - [ ] **服务端 Secret 同步部署**：在 `hw-license-center` (Cloudflare Workers) 中设置 `ZC_API_SECRET` 与客户端对齐，开启真正的“强验签”模式，彻底锁死 API。
+    - [ ] **性能专项优化 (Scanner IO 异步化)**：重构扫描引擎为 `ThreadPoolExecutor` 并发模型，解决 10万+ 文件时的 UI 阻塞问题。
+    - [ ] **目录大小计算算法优化**：由递归改为迭代（`os.scandir`），提升扫描速度。
+    - [ ] **自动化测试补全**：针对 `auth.py` 和 `quarantine.py` 编写测试用例，覆盖“授权过期”、“激活码吊销”、“文件占用”等复杂场景。
+    - [ ] **UI 细节微雕**：优化暗色模式适配及清理完成后的动效反馈。

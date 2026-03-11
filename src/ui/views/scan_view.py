@@ -337,18 +337,50 @@ class ScanView(ft.Column):
             animate_scale=300,
         )
 
-        _advanced_row_1 = ft.Row([self._tile_hibernation, self._tile_virtual_mem], spacing=15)
-        _advanced_row_2 = ft.Row([self._tile_app_migration, self._tile_update_clean], spacing=15)
+        # 5. OpenClaw 核心圆形磁贴 (C 位) — 全面优化版
+        self._tile_openclaw = ft.Container(
+            content=ft.Column([
+                ft.Text("🦞", size=36),
+                ft.Text("OpenClaw", size=12, weight=ft.FontWeight.W_800, color=ft.colors.ORANGE_ACCENT_700),
+                ft.Text("专项清理", size=9, color=COLOR_ZEN_TEXT_DIM)
+            ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=1),
+            width=110, height=110,
+            shape=ft.BoxShape.CIRCLE,
+            bgcolor="surfaceVariant",
+            border=ft.border.all(2.5, ft.colors.with_opacity(0.6, ft.colors.ORANGE_ACCENT_700)),
+            shadow=ft.BoxShadow(blur_radius=20, spread_radius=2, color=ft.colors.with_opacity(0.25, ft.colors.ORANGE_ACCENT_700)),
+            ink=True,
+            clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+            on_click=self._on_click_openclaw_tile,
+            on_hover=self._on_hover_tile,
+            tooltip="OpenClaw 专项说明：\n精准清理 OpenClaw 产生的大量日志、临时缓存与崩溃转储文件。\n该功能处于核心 C 位，代表对特定工具的专业级垃圾收割能力。",
+            animate_scale=300,
+            scale=0.0,  # 入场动画初始态：从零缩放
+        )
+
+        _grid_base = ft.Column([
+            ft.Row([self._tile_hibernation, self._tile_virtual_mem], spacing=25),
+            ft.Row([self._tile_app_migration, self._tile_update_clean], spacing=25)
+        ], spacing=25)
+
+        # 核心叠层布局：2x2 方阵 + 中心圆形
+        _advanced_grid_stack = ft.Stack([
+            _grid_base,
+            ft.Container(
+                content=self._tile_openclaw,
+                alignment=ft.alignment.center,
+            )
+        ], alignment=ft.alignment.center)
 
         # 组合极客大屏布局 (彻底断舍离中间层组件)
         self._idle_execution = ft.Container(
             content=ft.Column([
                 self._action_tile,
                 ft.Divider(height=1, thickness=1.2, color=ft.colors.with_opacity(0.3, "onSurfaceVariant")),
-                _advanced_row_1,
-                _advanced_row_2
-            ], spacing=20, expand=True, alignment=ft.MainAxisAlignment.CENTER),
+                _advanced_grid_stack
+            ], spacing=15, expand=True, alignment=ft.MainAxisAlignment.CENTER),
             expand=True,
+            padding=ft.padding.only(bottom=10),
         )
         
         # 右侧：引擎执行区 - 扫描态 (Active) SaaS 控制台化布局
@@ -427,7 +459,7 @@ class ScanView(ft.Column):
         _execution_panel_wrapper = ft.Container(
              content=ft.Stack([self._idle_execution, self._active_execution]),
              expand=5,
-             padding=20,
+             padding=ft.padding.only(left=20, right=20, top=15, bottom=15),
              margin=ft.padding.only(left=10, top=20, bottom=20, right=20),
              bgcolor="surfaceVariant",
              border_radius=16,
@@ -591,6 +623,15 @@ class ScanView(ft.Column):
                         self.update()
                     await asyncio.sleep(0.016)
             self.app.page.run_task(_animate)
+        
+        # ── 1.5 OpenClaw 核心磁贴入场弹出动画 ──
+        async def _openclaw_entrance():
+            import asyncio
+            await asyncio.sleep(0.3)  # 稍微延迟，让甜甜圈先出场
+            if self.page and hasattr(self, '_tile_openclaw'):
+                self._tile_openclaw.scale = 1.0
+                self._tile_openclaw.update()
+        self.app.page.run_task(_openclaw_entrance)
         
         # 已激活用户异步获取 AI 额度
         if getattr(self.app, "is_activated", False):
@@ -888,15 +929,16 @@ class ScanView(ft.Column):
 
     # ── 高阶功能：补丁清理框架 ──────────────────────────────────────────────
     def _on_click_update_clean_tile(self, e):
-         from core.system_optimizer import clean_windows_updates
-         import threading
-         
-         def close_dlg(e=None):
-             if hasattr(self, '_upd_dlg'):
-                self._upd_dlg.open = False
-                self.app.page.update()
-                
-         def confirm_action(e):
+        """陈年补丁清理对话框 (WinSxS 超深层清理)"""
+        def close_dlg(e=None):
+            if hasattr(self, '_upd_dlg'):
+               self._upd_dlg.open = False
+               self.app.page.update()
+
+        def confirm_action(e):
+             from core.system_optimizer import clean_windows_updates
+             import threading
+             
              # 切换 UI 状态到进度显示
              btn_execute.visible = False
              btn_cancel.visible = False
@@ -920,50 +962,75 @@ class ScanView(ft.Column):
              # 挂起一条线程，防止阻塞 Flet 主事件循环
              threading.Thread(target=_do_clean, daemon=True).start()
 
-         def _update_prog(val):
-             # 放弃精准进度，因为通过 pipe 重定向后 DISM 会不再输出控制台刷新符
-             pass
-             
-         def _finish(success: bool, msg: str):
-             close_dlg()
-             color = "green" if success else ft.colors.RED_800
-             self.app.page.snack_bar = ft.SnackBar(ft.Text(msg), bgcolor=color)
-             self.app.page.snack_bar.open = True
-             self.app.page.update()
+        def _update_prog(val):
+            # 放弃精准进度，因为通过 pipe 重定向后 DISM 会不再输出控制台刷新符
+            pass
+            
+        def _finish(success: bool, msg: str):
+            close_dlg()
+            color = "green"
+            self.app.page.snack_bar = ft.SnackBar(ft.Text(msg), bgcolor=color)
+            self.app.page.snack_bar.open = True
+            self.app.page.update()
 
-         progress_bar = ft.ProgressBar(value=None, color="error", bgcolor="outline", expand=True)
-         progress_text = ft.Text("引擎运转中", size=12, color="error", font_family="Consolas")
-         progress_col = ft.Column([
-             ft.Text("正在执行指令集 (视您的磁盘瓶颈，约耗时 1~5 分钟)\n切勿强制关机/重启机器，请耐心等待弹窗自动消失！", color=COLOR_ZEN_TEXT_DIM),
-             ft.Container(height=15),
-             ft.Row([progress_bar, progress_text])
-         ], visible=False)
+        progress_bar = ft.ProgressBar(value=None, color="error", bgcolor="outline", expand=True)
+        progress_text = ft.Text("引擎运转中", size=12, color="error", font_family="Consolas")
+        progress_col = ft.Column([
+            ft.Text("正在执行指令集 (视您的磁盘瓶颈，约耗时 1~5 分钟)\n切勿强制关机/重启机器，请耐心等待弹窗自动消失！", color=COLOR_ZEN_TEXT_DIM),
+            ft.Container(height=15),
+            ft.Row([progress_bar, progress_text])
+        ], visible=False)
 
-         content_text = ft.Text(
-             "【警告：极客指令】\n\n此操作将强行剥离 Windows 底层的组件存根仓库 (WinSxS 更新备份等)。"
-             "这通常能释放 3GB ~ 15GB 的超大深层空间。\n\n"
-             "后果：您将彻底失去「卸载或回退近期个别 Windows 补丁」的能力 (但不影响系统运行与未来的新更新)。",
-             size=13
-         )
-         
-         body = ft.Stack([
-             content_text,
-             progress_col
-         ])
-
-         btn_cancel = ft.TextButton("取消", on_click=close_dlg, style=ft.ButtonStyle(color=COLOR_ZEN_TEXT_DIM))
-         btn_execute = ft.ElevatedButton("无惧后果，立即粉碎", on_click=confirm_action, bgcolor="error", color="white")
-         
-         self._upd_dlg = ft.AlertDialog(
-            modal=True,
-            title=ft.Row([ft.Icon(ft.icons.SECURITY_UPDATE_WARNING, color="#E74C3C"), ft.Text("粉碎历史补丁", color="#E74C3C")]),
-            content=ft.Container(content=body, width=420, height=130),
-            actions=[btn_cancel, btn_execute],
-            actions_alignment=ft.MainAxisAlignment.END,
+        content_text = ft.Text(
+            "【警告：极客指令】\n\n此操作将强行剥离 Windows 底层的组件存根仓库 (WinSxS 更新备份等)。"
+            "这通常能释放 3GB ~ 15GB 的超大深层空间。\n\n"
+            "后果：您将彻底失去「卸载或回退近期个别 Windows 补丁」的能力 (但不影响系统运行与未来的新更新)。",
+            size=13
         )
-         self.app.page.dialog = self._upd_dlg
-         self._upd_dlg.open = True
-         self.app.page.update()
+        
+        body = ft.Stack([
+            content_text,
+            progress_col
+        ])
+
+        btn_cancel = ft.TextButton("取消", on_click=close_dlg, style=ft.ButtonStyle(color=COLOR_ZEN_TEXT_DIM))
+        btn_execute = ft.ElevatedButton("无惧后果，立即粉碎", on_click=confirm_action, bgcolor="error", color="white")
+        
+        self._upd_dlg = ft.AlertDialog(
+           modal=True,
+           title=ft.Row([ft.Icon(ft.icons.SECURITY_UPDATE_WARNING, color="#E74C3C"), ft.Text("粉碎历史补丁", color="#E74C3C")]),
+           content=ft.Container(content=body, width=420, height=130),
+           actions=[btn_cancel, btn_execute],
+           actions_alignment=ft.MainAxisAlignment.END,
+       )
+        self.app.page.dialog = self._upd_dlg
+        self._upd_dlg.open = True
+        self.app.page.update()
+
+    def _on_click_openclaw_tile(self, e):
+        """OpenClaw 专项清理点击事件"""
+        # 实现老板要求的“大龙虾”专项逻辑
+        from core.logger import logger
+        
+        # 1. 在本地 scan_nodes 中筛选 OpenClaw 相关的项
+        openclaw_nodes = [node for node in self.app.scan_nodes if "OpenClaw" in (node.get('path') or "")]
+        
+        if not openclaw_nodes:
+            self.app.page.snack_bar = ft.SnackBar(
+                ft.Text("未发现 OpenClaw 垃圾残留，您的系统非常清爽！"),
+                bgcolor=ft.colors.GREEN_700
+            )
+        else:
+            total_size = sum(node.get('size_bytes', 0) for node in openclaw_nodes) # Changed 'size' to 'size_bytes'
+            size_str = self.app.format_size(total_size)
+            self.app.page.snack_bar = ft.SnackBar(
+                ft.Text(f"已捕获 {len(openclaw_nodes)} 项 OpenClaw 残留 ({size_str})，正在执行深度粉碎..."),
+                bgcolor=ft.colors.ORANGE_ACCENT_700
+            )
+            logger.info(f"[OpenClaw] 专项清理触发: 涉及数据量 {size_str}")
+
+        self.app.page.snack_bar.open = True
+        self.app.page.update()
 
     # ── 高阶功能：虚拟内存管理框架 ──────────────────────────────────────────────
     def _on_click_virtual_mem_tile(self, e):

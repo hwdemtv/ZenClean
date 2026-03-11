@@ -114,10 +114,14 @@ def clean_windows_updates(on_progress=None) -> tuple[bool, str]:
         (success, message)
     """
     import re
+    import shutil
     # 匹配 DISM 输出中的进度: [======20.0%      ] 或者 [==========================100.0%==========================]
     progress_pattern = re.compile(r"\[.*?(\d+\.\d+)%.*?\]")
     
     try:
+        # 记录清理前的 C 盘可用空间
+        free_bytes_before = shutil.disk_usage("C:\\").free
+        
         logger.info("Executing: dism.exe /online /Cleanup-Image /StartComponentCleanup")
         
         # 启动子进程，开启管道读取 stdout
@@ -152,11 +156,30 @@ def clean_windows_updates(on_progress=None) -> tuple[bool, str]:
         
         if process.returncode == 0:
             if on_progress: on_progress(1.0)
-            msg = "系统级旧补丁组件已彻底粉碎，C 盘获得了新生。"
+            
+            # 计算释放的空间
+            free_bytes_after = shutil.disk_usage("C:\\").free
+            saved_bytes = free_bytes_after - free_bytes_before
+            
+            if saved_bytes > 0:
+                saved_mb = saved_bytes / (1024 * 1024)
+                if saved_mb >= 1024:
+                    msg = f"系统级旧补丁组件已彻底粉碎，成功为您释放了 {saved_mb / 1024:.2f} GB 的深层空间！"
+                else:
+                    msg = f"系统级旧补丁组件已彻底粉碎，成功为您释放了 {saved_mb:.1f} MB 的深层空间！"
+            else:
+                 msg = "系统级旧补丁组件已彻底粉碎，C盘组件库已处于最佳状态。(本次几乎无冗余可释放)"
+                 
             logger.info(msg)
             return True, msg
         else:
-            msg = f"DISM 清理异常结束，返回码: {process.returncode}。(若返回 740 请检查 UAC 权限)"
+            if process.returncode == 2148468742:  # 0x800f0806 (CBS_E_PENDING)
+                msg = "清理失败：系统当前有未完成的Windows更新状态。\n请【重启电脑】后再尝试进行此操作！"
+            elif process.returncode == 740:       # ERROR_ELEVATION_REQUIRED
+                msg = "清理失败：权限不足。\n请右键使用【以管理员身份运行】重新打开本程序。"
+            else:
+                msg = f"DISM 清理异常结束，返回码: {process.returncode}。"
+            
             logger.error(msg)
             return False, msg
             

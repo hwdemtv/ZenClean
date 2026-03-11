@@ -136,6 +136,19 @@ class ZenCleanApp(ft.Column):
             bgcolor=COLOR_ZEN_BG,
         )
 
+        # 通知区域挂载点
+        self._notification_column = ft.Column(spacing=10, animate_size=300)
+        
+        # 将通知条与内容容器垂直组合
+        self._main_content_area = ft.Column(
+            [
+                self._notification_column,
+                self._page_container
+            ],
+            expand=True,
+            spacing=0
+        )
+
         # 根布局：加入顶栏，下方左右分割
         self.controls = [
             self._title_bar,
@@ -143,7 +156,7 @@ class ZenCleanApp(ft.Column):
                 controls=[
                     self._nav_rail,
                     self._divider,
-                    self._page_container,
+                    self._main_content_area,
                 ],
                 expand=True,
                 spacing=0,
@@ -176,19 +189,22 @@ class ZenCleanApp(ft.Column):
 
         def _silent_callback(has_new, latest_version, url, msg):
             if has_new:
-                # 接收到含更新的高能通知，展示顶部提示条
+                # 接收到含更新的高能通知，展示顶部卡片式通知条 (方案 B)
                 def _ui_update():
-                    self.page.snack_bar = ft.SnackBar(
-                        content=ft.Row([
-                            ft.Icon(ft.icons.SYSTEM_UPDATE, color=COLOR_ZEN_PRIMARY),
-                            ft.Text(f"系统播报：发现新版本 v{latest_version}，{msg}"),
-                            ft.TextButton("立即去下载", on_click=lambda _: self.page.launch_url(url) if url else None)
-                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                        bgcolor="inverseSurface",
-                        duration=15000,
+                    # 提取第一行作为摘要，防止文字墙
+                    summary = msg.split('\n')[0][:60]
+                    if len(msg.split('\n')) > 1 or len(msg) > 60:
+                        summary += "..."
+                        
+                    self.show_notification(
+                        title=f"发现新版本 v{latest_version}",
+                        content=summary,
+                        icon=ft.icons.SYSTEM_UPDATE,
+                        actions=[
+                            ("立即更新", lambda: self.page.launch_url(url) if url else None, True),
+                            ("查看日志", lambda: self._show_markdown_dialog(f"ZenClean v{latest_version} 更新日志", msg), False)
+                        ]
                     )
-                    self.page.snack_bar.open = True
-                    self.page.update()
                 
                 if self.page:
                     _ui_update()
@@ -294,36 +310,106 @@ class ZenCleanApp(ft.Column):
                 dlg = ft.AlertDialog(
                     modal=True,
                     title=ft.Row([ft.Icon(ft.icons.CAMPAIGN, color=COLOR_ZEN_PRIMARY), ft.Text(title)]),
-                    content=ft.Row([ft.Text(content)], scroll=ft.ScrollMode.AUTO),
+                    content=ft.Container(
+                        content=ft.Markdown(content, selectable=True),
+                        width=500, height=400,
+                    ),
                     actions=actions,
                 )
                 self.page.overlay.append(dlg)
                 dlg.open = True
             else:
-                # 轻提醒：横幅 SnackBar，增强对比度
-                self.page.snack_bar = ft.SnackBar(
-                    content=ft.Row([
-                        ft.Icon(ft.icons.NOTIFICATIONS, color=COLOR_ZEN_PRIMARY, size=20),
-                        ft.Text(f"{title}: ", size=13, weight=ft.FontWeight.BOLD, color=ft.colors.WHITE),
-                        ft.VerticalDivider(width=1, color=ft.colors.WHITE24),
-                        ft.Text(f"{content[:50]}...", size=13, color=ft.colors.WHITE),
-                        ft.TextButton("去看看", 
-                            style=ft.ButtonStyle(color=COLOR_ZEN_PRIMARY),
-                            on_click=lambda _: self.page.launch_url(url)
-                        ) if url else ft.Container()
-                    ], alignment=ft.MainAxisAlignment.START, spacing=10),
-                    bgcolor="inverseSurface", # 提示信息使用反转面色材
-                    duration=10000,
-                    behavior=ft.SnackBarBehavior.FLOATING,
-                    margin=ft.margin.only(bottom=20, left=20, right=20)
+                # 非强制通知也改为卡片式展示
+                summary = content.split('\n')[0][:50] + "..." if len(content) > 50 else content
+                actions = []
+                if url:
+                    actions.append(("去看看", lambda: self.page.launch_url(url), True))
+                
+                self.show_notification(
+                    title=title,
+                    content=summary,
+                    icon=ft.icons.NOTIFICATIONS,
+                    actions=actions
                 )
-                self.page.snack_bar.open = True
             
             self.page.update()
             # 记录指纹，用于去重
             self.page.client_storage.set("last_notice_fingerprint", notice_fingerprint)
 
         self.page.run_task(_ui_action)
+
+    def show_notification(self, title: str, content: str, icon: str = ft.icons.INFO, actions: list = None):
+        """
+        在顶部通知区域挂载一个简洁的交互卡片 (方案 B 实现)
+        :param actions: list of (label, on_click_func, is_primary)
+        """
+        if not self.page: return
+
+        # 闭包：关闭通知
+        def _close_notice(e):
+            self._notification_column.controls.remove(notification_card)
+            self._notification_column.update()
+
+        action_buttons = []
+        if actions:
+            for label, func, is_prim in actions:
+                if is_prim:
+                    action_buttons.append(
+                        ft.ElevatedButton(
+                            label, 
+                            on_click=lambda _, f=func: f(), 
+                            bgcolor=COLOR_ZEN_PRIMARY, 
+                            color="white",
+                            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=6))
+                        )
+                    )
+                else:
+                    action_buttons.append(
+                        ft.TextButton(label, on_click=lambda _, f=func: f(), style=ft.ButtonStyle(color=COLOR_ZEN_PRIMARY))
+                    )
+
+        notification_card = ft.Container(
+            content=ft.Row([
+                ft.Icon(icon, color=COLOR_ZEN_PRIMARY, size=24),
+                ft.Column([
+                    ft.Text(title, size=14, weight=ft.FontWeight.BOLD, color=COLOR_ZEN_TEXT_MAIN),
+                    ft.Text(content, size=12, color=COLOR_ZEN_TEXT_DIM, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                ], spacing=2, expand=True),
+                ft.Row(action_buttons, spacing=10),
+                ft.IconButton(ft.icons.CLOSE, icon_size=16, icon_color=COLOR_ZEN_TEXT_DIM, on_click=_close_notice)
+            ], alignment=ft.MainAxisAlignment.START),
+            padding=ft.padding.symmetric(horizontal=20, vertical=12),
+            bgcolor=ft.colors.with_opacity(0.1, COLOR_ZEN_PRIMARY),
+            border=ft.border.all(1, ft.colors.with_opacity(0.2, COLOR_ZEN_PRIMARY)),
+            border_radius=10,
+            margin=ft.margin.only(bottom=10)
+        )
+
+        self._notification_column.controls.insert(0, notification_card)
+        self._notification_column.update()
+
+    def _show_markdown_dialog(self, title: str, markdown_content: str):
+        """展示 Markdown 渲染的详情对话框 (解决文字墙)"""
+        def _close(e):
+            dlg.open = False
+            self.page.update()
+
+        dlg = ft.AlertDialog(
+            title=ft.Row([ft.Icon(ft.icons.ARTICLE, color=COLOR_ZEN_PRIMARY), ft.Text(title)]),
+            content=ft.Container(
+                content=ft.Markdown(
+                    markdown_content,
+                    selectable=True,
+                    extension_set=ft.MarkdownExtensionSet.GITHUB_WEB,
+                ),
+                width=600,
+                height=500,
+            ),
+            actions=[ft.TextButton("关闭", on_click=_close)],
+        )
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
 
 
     def set_activated(self, is_activated: bool, lease_expiry: Optional[str] = None, total_expiry: Optional[str] = None):

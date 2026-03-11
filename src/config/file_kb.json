@@ -208,6 +208,15 @@
       "category": "downloads",
       "ai_advice": "警告：这是系统的默认下载文件夹。清理前请必须确认没有重要的下载件！",
       "is_checked_default": false
+    },
+    {
+      "id": "openclaw_logs_001",
+      "description": "OpenClaw 运行日志与临时文件",
+      "pattern": "^[Cc]:\\\\.*\\\\OpenClaw\\\\.*\\\\(logs|temp|tmp|crashdumps)\\\\",
+      "risk_level": "LOW",
+      "category": "app_cache",
+      "ai_advice": "OpenClaw 运行时产生的辅助日志与临时数据，清理后不影响程序核心功能。",
+      "is_checked_default": true
     }
   ]
 }
