@@ -8,14 +8,15 @@ ZenClean 系统大文件夹无损搬家引擎 (User Shell Folders Migration)
 执行三步走：
     1. 读注册表  —— 获取各库的当前绝对路径
     2. 搬文件    —— shutil.move 原子性逐项迁移，带进度回调
-    3. 改注册表  —— 写回新路径 + SHChangeNotify 刷新 Shell 缓存
+    3. 原生 API  —— 调用 SHSetKnownFolderPath 重定向系统文件夹
+                    等同于用户手动通过"属性 → 位置 → 移动"
 
 安全机制：
     - 迁移前置检查：目标盘可用空间 > 源目录总大小
     - 源目录与目标目录不能存在父子关系（防止循环移动）
     - 已存在同名文件时，逐项合并而非覆盖（merge 策略）
+    - API 调用失败时 fallback 到注册表写入 + Shell 通知
     - 注册表写入前备份旧值，任意步骤失败可 rollback()
-    - 迁移完成后在原路径创建 Junction Point 保持向后兼容
 
 公开 API：
     folders = get_shell_folders()           # 读取当前所有库路径
@@ -26,6 +27,7 @@ ZenClean 系统大文件夹无损搬家引擎 (User Shell Folders Migration)
 """
 
 import ctypes
+from ctypes import wintypes
 import os
 import shutil
 import threading
@@ -33,27 +35,79 @@ import winreg
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
+import uuid
 
-# ── 注册表常量 ────────────────────────────────────────────────────────────────
+from core.logger import logger
 
-_REG_KEY_USER_SHELL    = r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders"
-_REG_KEY_SHELL_FOLDERS = r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders"
+# ── 基础类型与 API 定义 ──────────────────────────────────────────────────────
 
-# Shell Folder 注册表键名 → 人类可读标签
-SHELL_FOLDER_KEYS: dict[str, str] = {
-    "Desktop":             "桌面",
-    "{374DE290-123F-4565-9164-39C4925E467B}": "下载",   # Downloads（无别名）
-    "Personal":            "文档",
-    "My Pictures":         "图片",
-    "My Video":            "视频",
-    "My Music":            "音乐",
+class GUID(ctypes.Structure):
+    _fields_ = [
+        ("Data1", wintypes.DWORD),
+        ("Data2", wintypes.WORD),
+        ("Data3", wintypes.WORD),
+        ("Data4", wintypes.BYTE * 8),
+    ]
+
+    def __init__(self, uuid_str):
+        u = uuid.UUID(uuid_str)
+        super().__init__(u.time_low, u.time_mid, u.time_hi_version, (ctypes.c_byte * 8)(*u.bytes[8:]))
+
+# SHSetKnownFolderPath(REFKNOWNFOLDERID rfid, DWORD dwFlags, HANDLE hToken, PCWSTR pszPath)
+_shell32 = ctypes.windll.shell32
+_SHSetKnownFolderPath = _shell32.SHSetKnownFolderPath
+_SHSetKnownFolderPath.argtypes = [
+    ctypes.POINTER(GUID),
+    wintypes.DWORD,
+    wintypes.HANDLE,
+    wintypes.LPCWSTR
+]
+_SHSetKnownFolderPath.restype = ctypes.c_long
+
+# ── 已知文件夹 GUID 定义 ──────────────────────────────────────────────────────
+
+KNOWN_FOLDER_GUIDS = {
+    "Desktop":   "{B4BFCC3A-DB2C-424C-B029-7FE99A87C641}",
+    "Downloads": "{374DE290-123F-4565-9164-39C4925E467B}",
+    "Documents": "{F42EE2D3-9099-49F8-A754-5C322FC86BD1}",
+    "Pictures":  "{33E28130-4E1E-4676-835A-98395C3BC3BB}",
+    "Videos":    "{18989B1D-99B5-455B-841C-AB7C74E4DDFC}",
+    "Music":     "{4BD8D571-6D19-48D3-BE97-47222BB8001D}",
 }
 
-# SHChangeNotify 事件 ID（通知 Shell 刷新文件夹图标/路径缓存）
-_SHCNE_ASSOCCHANGED = 0x08000000
-_SHCNE_IDLIST       = 0x04
-_SHCNF_FLUSH        = 0x1000
+# 内部注册表键名 → GUID 键名映射（用于向下兼容旧逻辑）
+REG_NAME_TO_GUID_KEY = {
+    "Desktop": "Desktop",
+    "{374DE290-123F-4565-9164-39C4925E467B}": "Downloads",
+    "Personal": "Documents",
+    "My Pictures": "Pictures",
+    "My Video": "Videos",
+    "My Music": "Music",
+}
 
+# 人类可读标签 (GUID 键名 -> 中文)
+SHELL_FOLDER_LABELS = {
+    "Desktop": "桌面",
+    "Downloads": "下载",
+    "Documents": "文档",
+    "Pictures": "图片",
+    "Videos": "视频",
+    "Music": "音乐",
+}
+
+# 注册表键名 -> 中文标签 (用于显示和回滚)
+SHELL_FOLDER_KEYS = {
+    "Desktop": "桌面",
+    "{374DE290-123F-4565-9164-39C4925E467B}": "下载",
+    "Personal": "文档",
+    "My Pictures": "图片",
+    "My Video": "视频",
+    "My Music": "音乐",
+}
+
+# 注册表常量
+_REG_KEY_USER_SHELL    = r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders"
+_REG_KEY_SHELL_FOLDERS = r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders"
 
 # ── 数据结构 ──────────────────────────────────────────────────────────────────
 
@@ -88,25 +142,27 @@ class PreflightReport:
 
 # ── 注册表读写 ────────────────────────────────────────────────────────────────
 
+# SHChangeNotify 相关的常量（保留供 fallback 使用）
+_SHCNE_ASSOCCHANGED = 0x08000000
+_SHCNF_FLUSH        = 0x1000
+
+# ── 注册表读写 ────────────────────────────────────────────────────────────────
+
 def get_shell_folders() -> dict[str, Path]:
     """
     读取当前用户所有 Shell Folder 的绝对路径。
-
     返回：{ 注册表键名: 绝对 Path }
-
-    注意：注册表中的值可能包含 %USERPROFILE% 等环境变量，
-    需用 winreg.ExpandEnvironmentStrings 展开。
     """
     result: dict[str, Path] = {}
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _REG_KEY_USER_SHELL) as hkey:
-            for reg_name in SHELL_FOLDER_KEYS:
+            for reg_name in REG_NAME_TO_GUID_KEY:
                 try:
                     raw, _ = winreg.QueryValueEx(hkey, reg_name)
                     expanded = winreg.ExpandEnvironmentStrings(raw)
                     result[reg_name] = Path(expanded)
                 except FileNotFoundError:
-                    pass  # 该键不存在，跳过
+                    pass
     except OSError as exc:
         raise RuntimeError(f"无法读取 Shell Folders 注册表：{exc}") from exc
     return result
@@ -249,21 +305,30 @@ def _merge_move(src: Path, dst: Path,
                 on_file(str(src_item), 0)
 
 
-def _create_junction(src: Path, target: Path) -> None:
+def _create_junction(src: Path, target: Path) -> bool:
     """
     在 src 位置创建指向 target 的 Junction Point，保持向后兼容。
-    失败时静默忽略（不影响已完成的文件迁移）。
+
+    Returns:
+        True 表示创建成功，False 表示失败。
     """
     try:
         import subprocess
-        subprocess.run(
+        result = subprocess.run(
             ["mklink", "/J", str(src), str(target)],
             shell=True,
             capture_output=True,
-            check=True,
+            text=True,
         )
-    except Exception:  # noqa: BLE001
-        pass
+        if result.returncode == 0:
+            logger.info(f"Junction 创建成功: {src} -> {target}")
+            return True
+        else:
+            logger.error(f"Junction 创建失败: {result.stderr.strip() or result.stdout.strip()}")
+            return False
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Junction 创建异常: {e}")
+        return False
 
 
 # ── MigrationPlan ─────────────────────────────────────────────────────────────
@@ -291,23 +356,24 @@ class MigrationPlan:
         self,
         folder_keys: list[str],
         dst_base: Path,
-        create_junction: bool = True,
+        create_junction: bool = False, # 正常情况旧目录会被 rmtree 彻底删除；此参数仅在 rmtree 失败时作为 fallback 兜底
     ):
         self._dst_base = Path(dst_base)
         self._create_junction = create_junction
         self._cancel = threading.Event()
-        self._reg_backups: dict[str, str] = {}   # 注册表回滚备份 {键名: 旧值}
+        self._reg_backups: dict[str, str] = {}
 
-        # 构建 ShellFolder 列表
         current = get_shell_folders()
         self.folders: list[ShellFolder] = []
         for key in folder_keys:
-            if key not in SHELL_FOLDER_KEYS:
+            if key not in REG_NAME_TO_GUID_KEY:
                 raise ValueError(f"未知的 Shell Folder 键名：{key}")
             src = current.get(key)
             if src is None:
                 raise RuntimeError(f"无法从注册表读取 {key} 的当前路径")
-            label = SHELL_FOLDER_KEYS[key]
+            
+            guid_key = REG_NAME_TO_GUID_KEY[key]
+            label = SHELL_FOLDER_LABELS[guid_key]
             dst = self._dst_base / src.name
             self.folders.append(ShellFolder(key=key, label=label, src=src, dst=dst))
 
@@ -385,14 +451,7 @@ class MigrationPlan:
 
     def execute(self, on_progress: ProgressCallback | None = None) -> None:
         """
-        执行完整迁移流程：移文件 → 改注册表 → 刷新 Shell → 创建 Junction。
-
-        Args:
-            on_progress: 进度回调 (folder_label, moved_bytes, total_bytes, current_file)
-                         在调用方线程（通常为 UI 线程）中被调用。
-
-        Raises:
-            RuntimeError: 任意关键步骤失败时抛出，携带人类可读错误信息。
+        执行完整迁移流程：移文件 → 原生 API 重定向 → (可选)创建 Junction。
         """
         self._cancel.clear()
 
@@ -411,7 +470,7 @@ class MigrationPlan:
                 if on_progress:
                     on_progress(_label, moved, total, filepath)
 
-            # ── Step 1：备份注册表旧值 ────────────────────────────────────────
+            # ── Step 1：备份旧路径 ──────────────────────────────────────────
             old_val = _read_reg_value(_REG_KEY_USER_SHELL, sf.key)
             if old_val is not None:
                 self._reg_backups[sf.key] = old_val
@@ -420,31 +479,98 @@ class MigrationPlan:
             try:
                 _merge_move(sf.src, sf.dst, _on_file, self._cancel)
             except Exception as exc:
-                raise RuntimeError(
-                    f"[{label}] 文件迁移失败：{exc}\n"
-                    f"源路径：{sf.src}\n目标路径：{sf.dst}"
-                ) from exc
+                raise RuntimeError(f"[{label}] 文件迁移失败：{exc}") from exc
 
             if self._cancel.is_set():
                 break
 
-            # ── Step 3：写注册表新路径 ────────────────────────────────────────
-            try:
-                _write_reg_value(_REG_KEY_USER_SHELL,    sf.key, str(sf.dst))
-                _write_reg_value(_REG_KEY_SHELL_FOLDERS, sf.key, str(sf.dst))
-            except OSError as exc:
-                raise RuntimeError(
-                    f"[{label}] 注册表写入失败：{exc}\n"
-                    "文件已移动，请手动将注册表路径更新为：" + str(sf.dst)
-                ) from exc
+            # ── Step 3：原生 API 重定向 (关键) ────────────────────────────────
+            reg_key_name = sf.key
+            guid_key = REG_NAME_TO_GUID_KEY.get(reg_key_name)
+            guid_str = KNOWN_FOLDER_GUIDS.get(guid_key)
 
-            # ── Step 4：Junction Point 向后兼容 ──────────────────────────────
-            if self._create_junction and not sf.src.exists():
-                _create_junction(sf.src, sf.dst)
+            api_success = False
+            if guid_str:
+                folder_guid = GUID(guid_str)
+                hr = _SHSetKnownFolderPath(ctypes.byref(folder_guid), 0, None, str(sf.dst))
+                if hr == 0: # S_OK
+                    api_success = True
+                    logger.info(f"[{label}] SHSetKnownFolderPath 成功: {sf.dst}")
+                else:
+                    logger.warning(f"[{label}] SHSetKnownFolderPath 返回错误码: 0x{hr & 0xFFFFFFFF:08X}")
+
+            if not api_success:
+                # Fallback 到旧的注册表写入方案
+                logger.info(f"[{label}] 使用注册表写入方案")
+                try:
+                    _write_reg_value(_REG_KEY_USER_SHELL,    sf.key, str(sf.dst))
+                    _write_reg_value(_REG_KEY_SHELL_FOLDERS, sf.key, str(sf.dst))
+                    logger.info(f"[{label}] 注册表写入成功: {sf.dst}")
+                except OSError as exc:
+                    logger.error(f"[{label}] 路径重定向失败: {exc}")
+                    raise RuntimeError(f"[{label}] 路径重定向失败：{exc}") from exc
+
+            # ── Step 4：彻底删除旧目录（对齐 Windows 原生行为） ─────────────
+            # Windows 原生"属性 → 位置 → 移动"的效果：
+            #   旧目录完全消失，C 盘下不再存在该文件夹。
+            # 我们必须复刻这一行为，否则旧目录会变成"野文件夹"，
+            # 应用程序仍可向其中写入文件，造成数据分散。
+            if sf.src.exists():
+                try:
+                    # 检查是否已经是 Junction（不需要再处理）
+                    attrs = os.stat(str(sf.src), follow_symlinks=False).st_file_attributes
+                    is_reparse = bool(attrs & 0x400)
+                    if is_reparse:
+                        sf.done = True
+                        continue
+                except (OSError, AttributeError):
+                    pass
+
+                # 先尝试移走残留内容（desktop.ini、系统重解析点等）
+                try:
+                    has_content = any(sf.src.iterdir())
+                except (OSError, PermissionError):
+                    has_content = False
+
+                if has_content:
+                    remaining_cancel = threading.Event()
+                    def _on_remaining(filepath: str, size: int) -> None:
+                        pass
+                    _merge_move(sf.src, sf.dst, _on_remaining, remaining_cancel)
+
+                # 暴力删除旧目录（对齐原生行为：让它彻底消失）
+                # 系统文件夹（如 Captures）通常带只读属性，需要先清除
+                def _on_rm_error(func, path, exc_info):
+                    """rmtree 失败时清除只读属性后重试"""
+                    import stat
+                    try:
+                        os.chmod(path, stat.S_IWRITE)
+                        func(path)
+                    except (OSError, PermissionError):
+                        pass  # 真正被锁定的文件，静默跳过
+
+                try:
+                    shutil.rmtree(str(sf.src), onerror=_on_rm_error)
+                    logger.info(f"[{label}] 旧目录已彻底删除，与原生搬家行为一致")
+                except (OSError, PermissionError) as e:
+                    # rmtree 仍然失败（文件被进程锁定）
+                    # 退而求其次：尝试建 Junction 做物理层拦截
+                    logger.warning(f"[{label}] 旧目录删除失败({e})，尝试建立 Junction 兜底")
+                    # 再次用 ignore_errors 尽量清理
+                    shutil.rmtree(str(sf.src), ignore_errors=True)
+
+                    if not sf.src.exists():
+                        _create_junction(sf.src, sf.dst)
+                        logger.info(f"[{label}] 已建立 Junction 兜底重定向")
+                    else:
+                        logger.warning(
+                            f"[{label}] 旧目录 {sf.src} 仍有文件被占用无法删除，"
+                            "请关闭相关程序后重试搬家"
+                        )
 
             sf.done = True
 
-        # ── Step 5：通知 Shell 刷新 ───────────────────────────────────────────
+        # ── Step 5：最终通知 ──────────────────────────────────────────────────
         _notify_shell()
 
     # ── 取消 ──────────────────────────────────────────────────────────────────
@@ -602,15 +728,26 @@ def restore_folder(key: str, on_progress: ProgressCallback | None = None) -> str
     except Exception as exc:
         raise RuntimeError(f"[{label}] 文件还原失败：{exc}") from exc
 
-    # 更新注册表
-    try:
-        _write_reg_value(_REG_KEY_USER_SHELL,    key, str(default_path))
-        _write_reg_value(_REG_KEY_SHELL_FOLDERS, key, str(default_path))
-    except OSError as exc:
-        raise RuntimeError(
-            f"[{label}] 注册表写回失败：{exc}\n"
-            f"文件已移回 {default_path}，请手动更新注册表。"
-        ) from exc
+    # 更新路径（优先使用 API）
+    guid_key = REG_NAME_TO_GUID_KEY.get(key)
+    guid_str = KNOWN_FOLDER_GUIDS.get(guid_key)
+    api_success = False
+    
+    if guid_str:
+        folder_guid = GUID(guid_str)
+        hr = _SHSetKnownFolderPath(ctypes.byref(folder_guid), 0, None, str(default_path))
+        if hr == 0:
+            api_success = True
+            
+    if not api_success:
+        try:
+            _write_reg_value(_REG_KEY_USER_SHELL,    key, str(default_path))
+            _write_reg_value(_REG_KEY_SHELL_FOLDERS, key, str(default_path))
+        except OSError as exc:
+            raise RuntimeError(
+                f"[{label}] 路径还原失败：{exc}\n"
+                f"文件已还原，但注册表未同步。"
+            ) from exc
 
     # 清理：删除其他盘上的空目录
     try:

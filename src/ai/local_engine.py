@@ -126,14 +126,19 @@ def analyze(path: str, size_bytes: int = 0) -> NodeDict:
         )
 
     # ── 规则引擎匹配 ──────────────────────────────────────────────────────────
+    # 优化：对于目录路径，同时尝试匹配 path + "\\" 以命中以 "\\" 结尾的规则
+    # 例如：规则 "C:\\Windows\\Temp\\" 可匹配目录 "C:\\Windows\\Temp"
+    path_with_sep = path + "\\" if not path.endswith("\\") else path
+
     for pattern, rule in _RULES:
-        if pattern.search(path):
+        # 先匹配原始路径
+        if pattern.search(path) or pattern.search(path_with_sep):
             return NodeDict(
                 path=path,
                 size_bytes=size_bytes,
                 risk_level=rule["risk_level"],
                 category=rule["category"],
-                is_checked=False,  # 用户偏好：扫描完后默认不勾选，由用户自主决定
+                is_checked=rule.get("is_checked_default", False),
                 ai_advice=rule["ai_advice"],
                 is_whitelisted=False,
                 scan_ts=time.time(),

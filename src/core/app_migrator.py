@@ -53,13 +53,14 @@ class AppTarget:
     """定义一个可被 Junction 搬家的软件大户源"""
     id: str             # "wechat_data"
     name: str           # "微信全局数据"
-    path_template: str  # C盘绝对路径模板
+    path_templates: list[str]  # C盘绝对路径模板列表（支持多候选）
     icon: str           # flet font_icon identifier
     description: str    # 描述
     risk_level: str     # "SAFE" | "CAUTION"
     process_names: list[str] = None # 关联的进程名列表，用于搬家前强制关闭检测
     category: str = "general"  # 分类: general, browser_cache, dev_tools, chat_apps
     parent_id: str = None  # 如果是子目标，指向父目标 ID (用于浏览器 Cache 拆分)
+    registry_key: str = None # Windows 注册表查找路径 (格式: "ROOT\SubKey|ValueName")
 
 # 预定义的打靶目标
 APP_TARGETS = [
@@ -67,7 +68,8 @@ APP_TARGETS = [
     AppTarget(
         id="wechat_data",
         name="微信聊天数据",
-        path_template="%USERPROFILE%\\Documents\\WeChat Files",
+        path_templates=["%USERPROFILE%\\Documents\\WeChat Files", "%USERPROFILE%\\Documents\\微信文件"],
+        registry_key="Software\\Tencent\\WeChat|FileSavePath",
         icon="CHAT",
         description="包含所有聊天记录、图片与各类附件",
         risk_level="SAFE",
@@ -77,7 +79,7 @@ APP_TARGETS = [
     AppTarget(
         id="tencent_qq",
         name="QQ聊天数据",
-        path_template="%USERPROFILE%\\Documents\\Tencent Files",
+        path_templates=["%USERPROFILE%\\Documents\\Tencent Files"],
         icon="FORUM",
         description="包含QQ接收的所有图片记录与文件",
         risk_level="SAFE",
@@ -87,7 +89,7 @@ APP_TARGETS = [
     AppTarget(
         id="dingtalk",
         name="钉钉 (DingTalk)",
-        path_template="%APPDATA%\\DingTalk",
+        path_templates=["%APPDATA%\\DingTalk"],
         icon="BUSINESS_CENTER",
         description="办公文件、图片及视频缓存。长期使用后极度臃肿。",
         risk_level="SAFE",
@@ -95,11 +97,21 @@ APP_TARGETS = [
         category="chat_apps"
     ),
     AppTarget(
-        id="feishu",
-        name="飞书 (Feishu)",
-        path_template="%LOCALAPPDATA%\\LarkShell",
+        id="feishu_roaming",
+        name="飞书 (Feishu - Roaming)",
+        path_templates=["%APPDATA%\\LarkShell"],
         icon="WORK_OUTLINE",
         description="包含聊天媒体缓存及版本更新存根。",
+        risk_level="SAFE",
+        process_names=["Feishu.exe"],
+        category="chat_apps"
+    ),
+    AppTarget(
+        id="feishu_local",
+        name="飞书 (Feishu - Local)",
+        path_templates=["%LOCALAPPDATA%\\Feishu"],
+        icon="WORK_OUTLINE",
+        description="飞书运行时产生的大型媒体缓存文件集。",
         risk_level="SAFE",
         process_names=["Feishu.exe"],
         category="chat_apps"
@@ -110,7 +122,7 @@ APP_TARGETS = [
     AppTarget(
         id="chrome_cache",
         name="Chrome 网页缓存",
-        path_template="%LOCALAPPDATA%\\Google\\Chrome\\User Data\\Default\\Cache",
+        path_templates=["%LOCALAPPDATA%\\Google\\Chrome\\User Data\\Default\\Cache"],
         icon="WEB",
         description="Chrome 浏览器网页缓存，可安全迁移，不影响登录状态",
         risk_level="SAFE",
@@ -121,7 +133,7 @@ APP_TARGETS = [
     AppTarget(
         id="chrome_code_cache",
         name="Chrome 代码缓存",
-        path_template="%LOCALAPPDATA%\\Google\\Chrome\\User Data\\Default\\Code Cache",
+        path_templates=["%LOCALAPPDATA%\\Google\\Chrome\\User Data\\Default\\Code Cache"],
         icon="WEB",
         description="Chrome 缓存的编译代码，可安全迁移",
         risk_level="SAFE",
@@ -132,7 +144,7 @@ APP_TARGETS = [
     AppTarget(
         id="chrome_gpucache",
         name="Chrome GPU 缓存",
-        path_template="%LOCALAPPDATA%\\Google\\Chrome\\User Data\\Default\\GPUCache",
+        path_templates=["%LOCALAPPDATA%\\Google\\Chrome\\User Data\\Default\\GPUCache"],
         icon="WEB",
         description="Chrome GPU 着色器缓存，可安全迁移",
         risk_level="SAFE",
@@ -144,7 +156,7 @@ APP_TARGETS = [
     AppTarget(
         id="edge_cache",
         name="Edge 网页缓存",
-        path_template="%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\Default\\Cache",
+        path_templates=["%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\Default\\Cache"],
         icon="WEB",
         description="Edge 浏览器网页缓存，可安全迁移，不影响登录状态",
         risk_level="SAFE",
@@ -155,7 +167,7 @@ APP_TARGETS = [
     AppTarget(
         id="edge_code_cache",
         name="Edge 代码缓存",
-        path_template="%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\Default\\Code Cache",
+        path_templates=["%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\Default\\Code Cache"],
         icon="WEB",
         description="Edge 缓存的编译代码，可安全迁移",
         risk_level="SAFE",
@@ -168,7 +180,7 @@ APP_TARGETS = [
     AppTarget(
         id="npm_cache",
         name="NPM 全局缓存",
-        path_template="%APPDATA%\\npm-cache",
+        path_templates=["%APPDATA%\\npm-cache"],
         icon="JAVASCRIPT",
         description="Node.js 历史下载过的前端依赖总仓库",
         risk_level="SAFE",
@@ -177,7 +189,7 @@ APP_TARGETS = [
     AppTarget(
         id="pip_cache",
         name="PIP 全局缓存",
-        path_template="%LOCALAPPDATA%\\pip\\cache",
+        path_templates=["%LOCALAPPDATA%\\pip\\cache"],
         icon="CODE",
         description="Python 历史下载过的安装包缓存库",
         risk_level="SAFE",
@@ -186,7 +198,7 @@ APP_TARGETS = [
     AppTarget(
         id="vscode_ext",
         name="Visual Studio Code 扩展包",
-        path_template="%USERPROFILE%\\.vscode\\extensions",
+        path_templates=["%USERPROFILE%\\.vscode\\extensions"],
         icon="TERMINAL",
         description="极其臃肿的开发工具扩展包。搬家后可能会影响启动速度。",
         risk_level="CAUTION",
@@ -196,7 +208,7 @@ APP_TARGETS = [
     AppTarget(
         id="docker_wsl",
         name="Docker 虚拟磁盘",
-        path_template="%LOCALAPPDATA%\\Docker\\wsl\\data",
+        path_templates=["%LOCALAPPDATA%\\Docker\\wsl\\data"],
         icon="DOCKER",
         description="包含极度沉重的 Docker Image",
         risk_level="CAUTION",
@@ -206,7 +218,7 @@ APP_TARGETS = [
     AppTarget(
         id="ollama_models",
         name="Ollama 本地模型",
-        path_template="%USERPROFILE%\\.ollama",
+        path_templates=["%USERPROFILE%\\.ollama"],
         icon="STREAKY_LENS",
         description="最占空间的本地大模型存放地 (Llama 3, DeepSeek 等)。",
         risk_level="SAFE",
@@ -216,7 +228,7 @@ APP_TARGETS = [
     AppTarget(
         id="cursor_ai",
         name="Cursor AI 编辑器",
-        path_template="%APPDATA%\\Cursor",
+        path_templates=["%APPDATA%\\Cursor"],
         icon="CODE",
         description="AI 编程工具产生的庞大索引数据。",
         risk_level="SAFE",
@@ -228,7 +240,7 @@ APP_TARGETS = [
     AppTarget(
         id="baidu_netdisk",
         name="百度网盘",
-        path_template="%APPDATA%\\Baidu\\BaiduNetdisk",
+        path_templates=["%APPDATA%\\Baidu\\BaiduNetdisk"],
         icon="CLOUD_QUEUE",
         description="包含数据库索引、缩略图缓存等 C 盘存根。",
         risk_level="SAFE",
@@ -240,7 +252,7 @@ APP_TARGETS = [
     AppTarget(
         id="gemini_artifacts",
         name="AI 助手历史产物 (.gemini)",
-        path_template="%USERPROFILE%\\.gemini",
+        path_templates=["%USERPROFILE%\\.gemini"],
         icon="AUTO_AWESOME",
         description="包含 AI 助手的历史录制、截图及日志产物。建议定期迁移。",
         risk_level="SAFE",
@@ -249,7 +261,7 @@ APP_TARGETS = [
     AppTarget(
         id="chatgpt_desktop",
         name="ChatGPT 桌面版",
-        path_template="%APPDATA%\\ChatGPT",
+        path_templates=["%APPDATA%\\ChatGPT"],
         icon="AUTO_AWESOME_MOSAIC",
         description="官方客户端的本地对话缓存与索引。",
         risk_level="SAFE",
@@ -259,7 +271,7 @@ APP_TARGETS = [
     AppTarget(
         id="claude_desktop",
         name="Claude 桌面版",
-        path_template="%APPDATA%\\Claude",
+        path_templates=["%APPDATA%\\Claude"],
         icon="COLOR_LENS",
         description="Claude 客户端的本地日志与运行数据。",
         risk_level="SAFE",
@@ -273,6 +285,48 @@ APP_TARGETS = [
 # - chrome_user_data: 已拆分为 chrome_cache, chrome_code_cache, chrome_gpucache
 # - edge_user_data: 已拆分为 edge_cache, edge_code_cache
 
+
+def resolve_target_path(target: AppTarget) -> Optional[str]:
+    """
+    根据 AppTarget 的 registry_key 和 path_templates 动态确定目标路径。
+    支持环境变量展开与注册表值提取。
+    """
+    from typing import Optional
+    from pathlib import Path
+    import os
+
+    # 1. 优先尝试注册表探测
+    if target.registry_key:
+        try:
+            import winreg
+            # 格式: Software\\Tencent\\WeChat|FileSavePath
+            parts = target.registry_key.split('|')
+            key_path = parts[0]
+            value_name = parts[1] if len(parts) > 1 else ""
+            
+            # 默认尝试 HKEY_CURRENT_USER 和 HKEY_LOCAL_MACHINE
+            for root_key in [winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE]:
+                try:
+                    with winreg.OpenKey(root_key, key_path) as key:
+                        val, _ = winreg.QueryValueEx(key, value_name)
+                        if val:
+                            p = Path(os.path.expandvars(val))
+                            if p.exists():
+                                logger.debug(f"Resolved {target.id} via registry: {p}")
+                                return str(p)
+                except OSError:
+                    continue
+        except Exception as e:
+            logger.debug(f"Registry lookup failed for {target.id}: {e}")
+
+    # 2. 依次尝试路径模板
+    for template in target.path_templates:
+        expanded = os.path.expandvars(template)
+        path = Path(expanded)
+        if path.exists():
+            return str(path)
+            
+    return None
 
 # 增量迁移提醒阈值 (当已搬家目录增长超过此值时提醒用户)
 INCREMENTAL_MIGRATION_THRESHOLD_GB = 1.0  # 1GB
@@ -534,7 +588,9 @@ class AppMigrator:
         if not target:
             return False, f"未识别的目标 App ID: {target_id}"
 
-        src_path_str = os.path.expandvars(target.path_template)
+        src_path_str = resolve_target_path(target)
+        if not src_path_str:
+            return False, f"[{target.name}] 数据目录不存在，可能该设备尚未安装或运行过该软件。"
         src_path = Path(src_path_str)
 
         if not src_path.exists():
@@ -692,11 +748,33 @@ class AppMigrator:
                 )
             except subprocess.CalledProcessError as e:
                 logger.error(f"Junction Link Creation Failed! STDERR: {e.stderr}")
-                # 关键：Junction 创建失败，但数据已在目标盘，状态文件保留以便恢复
-                state["phase"] = MigrationPhase.FAILED.value
-                state["error"] = "底层跨盘隐式映射(Junction)构建失败，但数据已迁移到目标盘。可尝试手动创建 Junction 或使用恢复功能。"
-                self._save_state(state)
-                return False, state["error"]
+                # 安全机制：Junction 失败时自动回滚数据到原位
+                logger.warning(f"Junction 创建失败，启动紧急回滚：将 {target.name} 数据移回原位置...")
+                rollback_ok = True
+                try:
+                    src_path.mkdir(parents=True, exist_ok=True)
+                    for item in os.listdir(dest_base):
+                        s = dest_base / item
+                        d = src_path / item
+                        try:
+                            shutil.move(str(s), str(d))
+                        except Exception as move_err:
+                            logger.error(f"回滚文件 {item} 失败: {move_err}")
+                            rollback_ok = False
+                except Exception as rollback_err:
+                    logger.error(f"紧急回滚失败: {rollback_err}")
+                    rollback_ok = False
+
+                if rollback_ok:
+                    state["phase"] = MigrationPhase.FAILED.value
+                    state["error"] = "Junction 构建失败，已自动将数据回滚至原位置，软件可正常使用。请检查权限后重试。"
+                    self._save_state(state)
+                    return False, state["error"]
+                else:
+                    state["phase"] = MigrationPhase.FAILED.value
+                    state["error"] = f"Junction 构建失败且自动回滚未完全成功。数据可能分散在 {src_path} 和 {dest_base} 两处，请手动检查。"
+                    self._save_state(state)
+                    return False, state["error"]
 
             # ════════════════════════════════════════════════════════════════════
             # 阶段 5: 完成 - 清理状态文件并记录历史
@@ -984,10 +1062,29 @@ class AppMigrator:
                 check=True
             )
         except subprocess.CalledProcessError as e:
-            state["phase"] = MigrationPhase.FAILED.value
-            state["error"] = "Junction 创建失败"
+            # 安全机制：回滚数据到原位
+            logger.warning("断点恢复中 Junction 创建失败，启动紧急回滚...")
+            rollback_ok = True
+            try:
+                src_path.mkdir(parents=True, exist_ok=True)
+                for item in os.listdir(dest_path):
+                    s = dest_path / item
+                    d = src_path / item
+                    try:
+                        shutil.move(str(s), str(d))
+                    except Exception:
+                        rollback_ok = False
+            except Exception:
+                rollback_ok = False
+
+            if rollback_ok:
+                state["phase"] = MigrationPhase.FAILED.value
+                state["error"] = "Junction 创建失败，已自动回滚数据。请检查权限后重试。"
+            else:
+                state["phase"] = MigrationPhase.FAILED.value
+                state["error"] = f"Junction 创建失败且回滚未完全成功。数据可能分散在 {src_path} 和 {dest_path} 两处。"
             self._save_state(state)
-            return False, "底层跨盘映射构建失败"
+            return False, state["error"]
 
         # 完成
         state["phase"] = MigrationPhase.COMPLETED.value

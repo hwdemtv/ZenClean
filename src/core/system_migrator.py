@@ -209,9 +209,39 @@ class SystemMigrator:
             )
         except subprocess.CalledProcessError as e:
             logger.error(f"System Junction Link Failed! STDERR: {e.stderr}")
-            # 如果 mklink 失败，尝试把文件拉回来是个灾难，这里尽量保持现状，让用户知晓
+            # 关键安全机制：Junction 失败时自动回滚数据到原位置
+            # 这是系统级搬家最危险的场景，必须尽力恢复
+            logger.warning("Junction 创建失败，启动紧急回滚：将数据移回原位置...")
+            rollback_ok = True
+            rollback_msg = ""
+            try:
+                src_path.mkdir(parents=True, exist_ok=True)
+                for item in os.listdir(dest_base):
+                    s = dest_base / Path(item)
+                    d = src_path / item
+                    try:
+                        shutil.move(str(s), str(d))
+                    except Exception as move_err:
+                        logger.error(f"回滚文件 {item} 失败: {move_err}")
+                        rollback_ok = False
+            except Exception as rollback_err:
+                logger.error(f"紧急回滚失败: {rollback_err}")
+                rollback_ok = False
+                rollback_msg = str(rollback_err)
+
             self.start_installer_service()
-            return False, "底层跨分区路由构建失败！文件已转移，但 C 盘挂载点建立破产。"
+
+            if rollback_ok:
+                return False, (
+                    "底层跨分区路由(Junction)构建失败。"
+                    "已自动将数据回滚至 C 盘原位置，系统完整性未受影响。"
+                    "请检查是否有权限问题后重试。"
+                )
+            else:
+                return False, (
+                    f"底层跨分区路由(Junction)构建失败，且自动回滚部分失败({rollback_msg})。"
+                    f"数据可能分散在 {src_path} 和 {dest_base} 两处，请手动检查。"
+                )
 
         # 5. 重启引擎，释放兵权
         self.start_installer_service()
@@ -267,6 +297,7 @@ class SystemMigrator:
             os.makedirs(str(src_path), exist_ok=True)
             items = os.listdir(real_dest_path)
             total = len(items)
+            failed_items = []
             
             for i, item in enumerate(items):
                 s = real_dest_path / item
@@ -275,11 +306,44 @@ class SystemMigrator:
                     shutil.move(str(s), str(d))
                 except Exception as e:
                     logger.warning(f"Failed to pull back {s}: {e}")
+                    failed_items.append(item)
                 if on_progress and total > 0:
                     on_progress(i / total)
+                    
+            if failed_items:
+                # 部分文件回迁失败，但 Junction 已被删除
+                # 安全措施：已回迁的文件在 src_path，未回迁的在 real_dest_path
+                logger.warning(f"部分文件回迁失败: {failed_items}")
+                self.start_installer_service()
+                return True, (
+                    f"已部分完成回迁。{len(failed_items)} 个文件未能移回，"
+                    f"仍留在 {real_dest_path}，请手动处理。"
+                )
         except Exception as e:
-             self.start_installer_service()
-             return False, f"物理数据列车返程脱轨: {e}"
+            # 灾难恢复：回迁失败时尝试重建 Junction 保持系统可用
+            logger.error(f"文件回迁失败: {e}，尝试重建 Junction 恢复可用性...")
+            try:
+                # 如果 src_path 是空或部分填充的普通目录，删掉后重建 Junction
+                if src_path.exists():
+                    shutil.rmtree(str(src_path), ignore_errors=True)
+                subprocess.run(
+                    ["mklink", "/J", str(src_path), str(real_dest_path)],
+                    shell=True, capture_output=True, check=True,
+                    creationflags=subprocess.CREATE_NO_WINDOW
+                )
+                self.start_installer_service()
+                return False, (
+                    f"文件回迁失败({e})，已自动重建虫洞(Junction)恢复系统可用性。"
+                    "数据仍在目标盘，搬家状态保持不变。"
+                )
+            except Exception as rebuild_err:
+                logger.error(f"重建 Junction 也失败: {rebuild_err}")
+                self.start_installer_service()
+                return False, (
+                    f"物理数据列车返程脱轨: {e}。"
+                    f"且虫洞重建失败: {rebuild_err}。"
+                    f"请手动将 {real_dest_path} 的数据移回 {src_path}。"
+                )
             
         # 3. 清扫地盘与档案销毁
         try:

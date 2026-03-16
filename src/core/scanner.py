@@ -111,6 +111,37 @@ class ScanWorker(threading.Thread):
         """请求停止扫描。设置停止标志，但仍会触发 _on_done 回调以更新 UI 状态。"""
         self._stop_event.set()
 
+    def _should_skip_for_hidden(self, path: str) -> bool:
+        """条件性跳过隐藏文件，保留特定例外（如回收站和明确指示的缓存）"""
+        if not self._skip_hidden:
+            return False
+
+        try:
+            attrs = os.stat(path, follow_symlinks=False).st_file_attributes
+            is_hidden = attrs & _FILE_ATTRIBUTE_HIDDEN
+            is_system = attrs & _FILE_ATTRIBUTE_SYSTEM
+
+            if not (is_hidden or is_system):
+                return False
+
+            path_lower = path.lower()
+            # 例外：回收站内的文件不应跳过
+            if r"$recycle.bin" in path_lower:
+                return False
+
+            # 例外：Temp 目录下的隐藏文件可能是垃圾
+            if r"\temp\\" in path_lower or path_lower.endswith(r"\temp"):
+                return False
+
+            # 例外：已知的缓存目录
+            cache_indicators = ["cache", "tmp", "cached"]
+            if any(ind in path_lower.split(os.sep) for ind in cache_indicators):
+                return False
+
+            return True
+        except OSError:
+            return True
+
     def _scan(self) -> None:
         batch: list[dict] = []
         total = 0
@@ -137,12 +168,12 @@ class ScanWorker(threading.Thread):
 
                 filtered_dirs: list[str] = []
                 for d in dirs:
-                    # 0. 目录名快速过滤（过滤 WebCache、WebView2 等海量且锁死区）
-                    if whitelist.is_ignored_dir_name(d):
+                    dir_path = os.path.join(root_str, d)
+
+                    # 0. 目录名条件化过滤（避免完全封杀浏览器的大数据缓存区）
+                    if whitelist.should_skip_dir(dir_path, d):
                         skipped += 1
                         continue
-
-                    dir_path = os.path.join(root_str, d)
 
                     # 1. 白名单目录剪枝
                     if whitelist.is_protected(dir_path):
@@ -160,18 +191,10 @@ class ScanWorker(threading.Thread):
                         skipped += 1
                         continue
 
-                    # 3. 隐藏/系统目录跳过
-                    if self._skip_hidden:
-                        try:
-                            attrs = getattr(
-                                os.stat(dir_path, follow_symlinks=False),
-                                "st_file_attributes", 0
-                            )
-                            if attrs & (_FILE_ATTRIBUTE_HIDDEN | _FILE_ATTRIBUTE_SYSTEM):
-                                skipped += 1
-                                continue
-                        except OSError:
-                            pass
+                    # 3. 隐藏/系统目录条件化跳过（不过分苛刻）
+                    if self._should_skip_for_hidden(dir_path):
+                        skipped += 1
+                        continue
 
                     filtered_dirs.append(d)
 
@@ -186,18 +209,10 @@ class ScanWorker(threading.Thread):
                         skipped += 1
                         continue
 
-                    # 隐藏/系统文件跳过
-                    if self._skip_hidden:
-                        try:
-                            attrs = getattr(
-                                os.stat(fpath, follow_symlinks=False),
-                                "st_file_attributes", 0
-                            )
-                            if attrs & (_FILE_ATTRIBUTE_HIDDEN | _FILE_ATTRIBUTE_SYSTEM):
-                                skipped += 1
-                                continue
-                        except OSError:
-                            pass
+                    # 隐藏/系统文件条件化跳过（防止误杀大量被设为隐藏格式但本属垃圾的缓存）
+                    if self._should_skip_for_hidden(fpath):
+                        skipped += 1
+                        continue
 
                     # 获取文件大小
                     try:

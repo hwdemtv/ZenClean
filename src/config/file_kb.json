@@ -121,11 +121,11 @@
     },
     {
       "id": "recycle_bin_001",
-      "description": "回收站文件",
+      "description": "回收站文件（高危，默认不勾选）",
       "pattern": "^[Cc]:\\\\\\$Recycle\\.Bin\\\\",
-      "risk_level": "MEDIUM",
+      "risk_level": "HIGH",
       "category": "recycle_bin",
-      "ai_advice": "回收站中的文件，如确认不需要恢复可清理。建议用户自行逐项确认后删除。",
+      "ai_advice": "警告：回收站中的文件，清理后将永久删除无法恢复！请确认不需要恢复后再清理。",
       "is_checked_default": false
     },
     {
@@ -135,6 +135,51 @@
       "risk_level": "HIGH",
       "category": "social_media",
       "ai_advice": "警告：此目录包含微信接收的图片、视频或文件，误删将导致不可逆丢失！仅在明确不需要时勾选。",
+      "is_checked_default": false
+    },
+    {
+      "id": "qq_media_001",
+      "description": "QQ接收的图片与文件（高危，默认不勾选）",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\Documents\\\\Tencent Files\\\\[^\\\\]+\\\\(Image|FileRecv|Video)\\\\",
+      "risk_level": "HIGH",
+      "category": "social_media",
+      "ai_advice": "警告：此目录包含QQ接收的图片、视频或文件，误删将导致不可逆丢失！仅在明确不需要时勾选。",
+      "is_checked_default": false
+    },
+    {
+      "id": "wechat_chat_root_001",
+      "description": "微信聊天记录根目录（禁止清理，仅支持迁移）",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\Documents\\\\WeChat Files$",
+      "risk_level": "CRISIS",
+      "category": "protected",
+      "ai_advice": "此目录为微信聊天记录根目录，包含所有聊天数据和媒体文件。禁止清理，但可以通过「应用搬家」功能迁移到其他磁盘。",
+      "is_checked_default": false
+    },
+    {
+      "id": "qq_chat_root_001",
+      "description": "QQ聊天记录根目录（禁止清理，仅支持迁移）",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\Documents\\\\Tencent Files$",
+      "risk_level": "CRISIS",
+      "category": "protected",
+      "ai_advice": "此目录为QQ聊天记录根目录，包含所有聊天数据和媒体文件。禁止清理，但可以通过「应用搬家」功能迁移到其他磁盘。",
+      "is_checked_default": false
+    },
+    {
+      "id": "chrome_root_protected",
+      "description": "Chrome 浏览器用户配置文件根目录（保留登录态与扩展）",
+      "pattern": "^[Cc]:\\\\\\\\Users\\\\\\\\[^\\\\\\\\]+\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Google\\\\\\\\Chrome\\\\\\\\User Data\\\\\\\\Default$",
+      "risk_level": "CRISIS",
+      "category": "protected",
+      "ai_advice": "此为 Chrome 浏览器的核心配置目录，包含书签、设置、插件及登录状态，严禁清理！",
+      "is_checked_default": false
+    },
+    {
+      "id": "edge_root_protected",
+      "description": "Edge 浏览器用户配置文件根目录（保留登录态与扩展）",
+      "pattern": "^[Cc]:\\\\\\\\Users\\\\\\\\[^\\\\\\\\]+\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Microsoft\\\\\\\\Edge\\\\\\\\User Data\\\\\\\\Default$",
+      "risk_level": "CRISIS",
+      "category": "protected",
+      "ai_advice": "此为 Edge 浏览器的核心配置目录，包含书签、设置、插件及登录状态，严禁清理！",
       "is_checked_default": false
     },
     {
@@ -210,13 +255,1353 @@
       "is_checked_default": false
     },
     {
-      "id": "openclaw_logs_001",
-      "description": "OpenClaw 运行日志与临时文件",
-      "pattern": "^[Cc]:\\\\.*\\\\OpenClaw\\\\.*\\\\(logs|temp|tmp|crashdumps)\\\\",
+      "id": "openclaw_sessions_001",
+      "description": "OpenClaw AI 会话历史记录",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\\\.openclaw\\\\agents\\\\.*\\\\sessions\\\\",
       "risk_level": "LOW",
       "category": "app_cache",
-      "ai_advice": "OpenClaw 运行时产生的辅助日志与临时数据，清理后不影响程序核心功能。",
+      "ai_advice": "OpenClaw 的历史对话记录与转录文本，清理后不影响当前正常运行。",
       "is_checked_default": true
+    },
+    {
+      "id": "openclaw_logs_global",
+      "description": "OpenClaw 运行日志与转储",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\\\.openclaw|Windows\\\\Temp|Temp)\\\\openclaw\\\\.*\\.log$",
+      "risk_level": "LOW",
+      "category": "app_cache",
+      "ai_advice": "OpenClaw 全局运行日志，包含 Gateway 与 Daemon 的流水记录，安全可清理。",
+      "is_checked_default": true
+    },
+    {
+      "id": "openclaw_legacy_cleanup",
+      "description": "OpenClaw 旧版本遗留残余",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\\\.openclaw\\\\(sessions|agent)\\\\",
+      "risk_level": "LOW",
+      "category": "app_cache",
+      "ai_advice": "OpenClaw 架构升级后的旧版遗留目录，检测到即可安全删除。",
+      "is_checked_default": true
+    },
+    {
+      "id": "wechat_msg_cache_001",
+      "description": "微信消息图片缓存",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\Documents\\\\WeChat Files\\\\[^\\\\]+\\\\FileStorage\\\\MsgAttach\\\\Temp\\\\",
+      "risk_level": "LOW",
+      "category": "social_cache",
+      "ai_advice": "微信消息临时图片缓存，可安全清理。",
+      "is_checked_default": true
+    },
+    {
+      "id": "wechat_xplugin_001",
+      "description": "微信小程序缓存",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\AppData\\\\Roaming\\\\Tencent\\\\WeChat\\\\XPlugin\\\\",
+      "risk_level": "LOW",
+      "category": "social_cache",
+      "ai_advice": "微信小程序运行缓存，清理后小程序需重新加载。",
+      "is_checked_default": true
+    },
+    {
+      "id": "douyin_cache_001",
+      "description": "抖音 PC 客户端缓存",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\AppData\\\\Local\\\\Douyin\\\\.*\\\\Cache\\\\",
+      "risk_level": "LOW",
+      "category": "app_cache",
+      "ai_advice": "抖音视频预加载缓存，可安全清理。",
+      "is_checked_default": true
+    },
+    {
+      "id": "jianying_cache_001",
+      "description": "剪映缓存",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\AppData\\\\Local\\\\JianyingPro\\\\.*\\\\Cache\\\\",
+      "risk_level": "LOW",
+      "category": "app_cache",
+      "ai_advice": "剪映草稿缓存与预览文件，清理后需重新生成。",
+      "is_checked_default": true
+    },
+    {
+      "id": "wps_cache_001",
+      "description": "WPS Office 缓存",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\AppData\\\\Roaming\\\\Kingsoft\\\\WPS Office\\\\.*\\\\cache\\\\",
+      "risk_level": "LOW",
+      "category": "app_cache",
+      "ai_advice": "WPS 临时文件与备份缓存，可安全清理。",
+      "is_checked_default": true
+    },
+    {
+      "id": "qqbrowser_cache_001",
+      "description": "QQ 浏览器缓存",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\AppData\\\\Local\\\\Tencent\\\\QQBrowser\\\\.*\\\\Cache\\\\",
+      "risk_level": "LOW",
+      "category": "browser_cache",
+      "ai_advice": "QQ 浏览器网页缓存，可安全清理。",
+      "is_checked_default": true
+    },
+    {
+      "id": "sogou_browser_cache_001",
+      "description": "搜狗浏览器缓存",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\AppData\\\\Roaming\\\\SogouExplorer\\\\.*\\\\Cache\\\\",
+      "risk_level": "LOW",
+      "category": "browser_cache",
+      "ai_advice": "搜狗浏览器网页缓存，可安全清理。",
+      "is_checked_default": true
+    },
+    {
+      "id": "360_browser_cache_001",
+      "description": "360 安全浏览器缓存",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\AppData\\\\Local\\\\360Chrome\\\\.*\\\\Cache\\\\",
+      "risk_level": "LOW",
+      "category": "browser_cache",
+      "ai_advice": "360 浏览器网页缓存，可安全清理。",
+      "is_checked_default": true
+    },
+    {
+      "id": "aliwangwang_cache_001",
+      "description": "阿里旺旺缓存",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\AppData\\\\Roaming\\\\AliWangWang\\\\.*\\\\Cache\\\\",
+      "risk_level": "LOW",
+      "category": "social_cache",
+      "ai_advice": "阿里旺旺聊天图片缓存，可安全清理。",
+      "is_checked_default": true
+    },
+    {
+      "id": "dingtalk_file_cache_001",
+      "description": "钉钉文件缓存",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\AppData\\\\Roaming\\\\DingTalk\\\\.*\\\\FileCache\\\\",
+      "risk_level": "LOW",
+      "category": "social_cache",
+      "ai_advice": "钉钉接收的文件缓存，清理不影响原始文件。",
+      "is_checked_default": true
+    },
+    {
+      "id": "steam_cache_001",
+      "description": "Steam 网页缓存",
+      "pattern": "^[Cc]:\\\\Program Files \\(x86\\)\\\\Steam\\\\appcache\\\\",
+      "risk_level": "LOW",
+      "category": "app_cache",
+      "ai_advice": "Steam 商店页面缓存，可安全清理。",
+      "is_checked_default": true
+    },
+    {
+      "id": "wegame_cache_001",
+      "description": "WeGame 缓存",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\AppData\\\\Roaming\\\\Tencent\\\\WeGame\\\\.*\\\\Cache\\\\",
+      "risk_level": "LOW",
+      "category": "app_cache",
+      "ai_advice": "WeGame 游戏平台缓存，可安全清理。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_000",
+      "description": "Windows 更新下载缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Windows\\\\\\\\SoftwareDistribution\\\\\\\\Download",
+      "risk_level": "LOW",
+      "category": "system_cache",
+      "ai_advice": "自动识别的 Windows 更新下载缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_001",
+      "description": "Windows 系统日志",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Windows\\\\\\\\Logs",
+      "risk_level": "LOW",
+      "category": "system_cache",
+      "ai_advice": "自动识别的 Windows 系统日志 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_002",
+      "description": "Windows 安装日志缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Windows\\\\\\\\Panther",
+      "risk_level": "LOW",
+      "category": "system_cache",
+      "ai_advice": "自动识别的 Windows 安装日志缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_003",
+      "description": "Windows 预读取缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Windows\\\\\\\\Prefetch",
+      "risk_level": "LOW",
+      "category": "system_cache",
+      "ai_advice": "自动识别的 Windows 预读取缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_004",
+      "description": "Windows 旧更新数据",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Windows\\\\\\\\SoftwareDistribution\\\\\\\\OldData",
+      "risk_level": "LOW",
+      "category": "system_cache",
+      "ai_advice": "自动识别的 Windows 旧更新数据 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_005",
+      "description": "Windows 缩略图缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Microsoft\\\\\\\\Windows\\\\\\\\Explorer",
+      "risk_level": "LOW",
+      "category": "system_cache",
+      "ai_advice": "自动识别的 Windows 缩略图缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_006",
+      "description": "Windows IE/通用网络缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Microsoft\\\\\\\\Windows\\\\\\\\INetCache",
+      "risk_level": "LOW",
+      "category": "system_cache",
+      "ai_advice": "自动识别的 Windows IE/通用网络缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_007",
+      "description": "Windows 传递优化缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Microsoft\\\\\\\\Windows\\\\\\\\DeliveryOptimization",
+      "risk_level": "LOW",
+      "category": "system_cache",
+      "ai_advice": "自动识别的 Windows 传递优化缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_008",
+      "description": "Windows 通知数据库缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Microsoft\\\\\\\\Windows\\\\\\\\Notifications",
+      "risk_level": "LOW",
+      "category": "system_cache",
+      "ai_advice": "自动识别的 Windows 通知数据库缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_009",
+      "description": "Windows 游戏录制缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Microsoft\\\\\\\\Windows\\\\\\\\GameDVR",
+      "risk_level": "LOW",
+      "category": "system_cache",
+      "ai_advice": "自动识别的 Windows 游戏录制缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_010",
+      "description": "系统崩溃转储文件",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*CrashDumps",
+      "risk_level": "LOW",
+      "category": "system_cache",
+      "ai_advice": "自动识别的 系统崩溃转储文件 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_011",
+      "description": "Windows 错误报告缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Microsoft\\\\\\\\Windows\\\\\\\\WER",
+      "risk_level": "LOW",
+      "category": "system_cache",
+      "ai_advice": "自动识别的 Windows 错误报告缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_012",
+      "description": "Chrome 浏览器缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Google\\\\\\\\Chrome\\\\\\\\User Data\\\\\\\\Default\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "browser_cache",
+      "ai_advice": "自动识别的 Chrome 浏览器缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_013",
+      "description": "Chrome 浏览器代码缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Google\\\\\\\\Chrome\\\\\\\\User Data\\\\\\\\Default\\\\\\\\Code Cache",
+      "risk_level": "LOW",
+      "category": "browser_cache",
+      "ai_advice": "自动识别的 Chrome 浏览器代码缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_014",
+      "description": "Chrome 浏览器 GPU 缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Google\\\\\\\\Chrome\\\\\\\\User Data\\\\\\\\Default\\\\\\\\GPUCache",
+      "risk_level": "LOW",
+      "category": "browser_cache",
+      "ai_advice": "自动识别的 Chrome 浏览器 GPU 缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_015",
+      "description": "Edge 浏览器缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Microsoft\\\\\\\\Edge\\\\\\\\User Data\\\\\\\\Default\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "browser_cache",
+      "ai_advice": "自动识别的 Edge 浏览器缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_016",
+      "description": "Edge 浏览器代码缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Microsoft\\\\\\\\Edge\\\\\\\\User Data\\\\\\\\Default\\\\\\\\Code Cache",
+      "risk_level": "LOW",
+      "category": "browser_cache",
+      "ai_advice": "自动识别的 Edge 浏览器代码缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_017",
+      "description": "Edge 浏览器 GPU 缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Microsoft\\\\\\\\Edge\\\\\\\\User Data\\\\\\\\Default\\\\\\\\GPUCache",
+      "risk_level": "LOW",
+      "category": "browser_cache",
+      "ai_advice": "自动识别的 Edge 浏览器 GPU 缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_018",
+      "description": "Firefox 浏览器缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Mozilla\\\\\\\\Firefox\\\\\\\\Profiles.*\\\\\\\\cache2",
+      "risk_level": "LOW",
+      "category": "browser_cache",
+      "ai_advice": "自动识别的 Firefox 浏览器缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_019",
+      "description": "Brave 浏览器缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*BraveSoftware\\\\\\\\Brave-Browser.*\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "browser_cache",
+      "ai_advice": "自动识别的 Brave 浏览器缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_020",
+      "description": "Opera 浏览器缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Opera Software\\\\\\\\Opera Stable\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "browser_cache",
+      "ai_advice": "自动识别的 Opera 浏览器缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_021",
+      "description": "360 极速浏览器缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*360ChromeX\\\\\\\\Chrome.*\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "browser_cache",
+      "ai_advice": "自动识别的 360 极速浏览器缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_022",
+      "description": "UC 浏览器 PC 版缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*UCBrowser.*\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "browser_cache",
+      "ai_advice": "自动识别的 UC 浏览器 PC 版缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_023",
+      "description": "2345 浏览器缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*2345Explorer.*\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "browser_cache",
+      "ai_advice": "自动识别的 2345 浏览器缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_024",
+      "description": "星愿浏览器缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Tendraw.*\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "browser_cache",
+      "ai_advice": "自动识别的 星愿浏览器缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_025",
+      "description": "QQ 运行日志",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Tencent\\\\\\\\QQ\\\\\\\\log",
+      "risk_level": "LOW",
+      "category": "social_cache",
+      "ai_advice": "自动识别的 QQ 运行日志 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_026",
+      "description": "QQ 临时文件",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Tencent\\\\\\\\QQ\\\\\\\\Temp",
+      "risk_level": "LOW",
+      "category": "social_cache",
+      "ai_advice": "自动识别的 QQ 临时文件 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_027",
+      "description": "QQ 杂项缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Tencent\\\\\\\\QQ\\\\\\\\Misc",
+      "risk_level": "LOW",
+      "category": "social_cache",
+      "ai_advice": "自动识别的 QQ 杂项缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_028",
+      "description": "QQ 本地缓存大容量区",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Tencent\\\\\\\\QQCache",
+      "risk_level": "LOW",
+      "category": "social_cache",
+      "ai_advice": "自动识别的 QQ 本地缓存大容量区 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_029",
+      "description": "QQ音乐播放缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Tencent\\\\\\\\QQMusic\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "av_cache",
+      "ai_advice": "自动识别的 QQ音乐播放缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_030",
+      "description": "QQ音乐临时文件",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Tencent\\\\\\\\QQMusic\\\\\\\\Temp",
+      "risk_level": "LOW",
+      "category": "av_cache",
+      "ai_advice": "自动识别的 QQ音乐临时文件 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_031",
+      "description": "腾讯视频播放缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Tencent\\\\\\\\QLive\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "av_cache",
+      "ai_advice": "自动识别的 腾讯视频播放缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_032",
+      "description": "腾讯视频临时文件",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Tencent\\\\\\\\QLive\\\\\\\\Temp",
+      "risk_level": "LOW",
+      "category": "av_cache",
+      "ai_advice": "自动识别的 腾讯视频临时文件 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_033",
+      "description": "腾讯会议临时缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Tencent\\\\\\\\WeMeet\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "social_cache",
+      "ai_advice": "自动识别的 腾讯会议临时缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_034",
+      "description": "WeGame 游戏下载安装包残留",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Tencent\\\\\\\\WeGame\\\\\\\\Download",
+      "risk_level": "LOW",
+      "category": "game_cache",
+      "ai_advice": "自动识别的 WeGame 游戏下载安装包残留 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_035",
+      "description": "腾讯文档本地缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Tencent\\\\\\\\Docs\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "office_cache",
+      "ai_advice": "自动识别的 腾讯文档本地缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_036",
+      "description": "抖音 PC 版缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*DouyinPC\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "av_cache",
+      "ai_advice": "自动识别的 抖音 PC 版缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_037",
+      "description": "抖音 PC 版临时文件",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Douyin\\\\\\\\Temp",
+      "risk_level": "LOW",
+      "category": "av_cache",
+      "ai_advice": "自动识别的 抖音 PC 版临时文件 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_038",
+      "description": "剪映代理文件缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*JianyingPro\\\\\\\\User Data\\\\\\\\Proxy",
+      "risk_level": "LOW",
+      "category": "av_cache",
+      "ai_advice": "自动识别的 剪映代理文件缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_039",
+      "description": "剪映运行日志",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*JianyingPro\\\\\\\\Log",
+      "risk_level": "LOW",
+      "category": "av_cache",
+      "ai_advice": "自动识别的 剪映运行日志 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_040",
+      "description": "飞书本地缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Feishu\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "social_cache",
+      "ai_advice": "自动识别的 飞书本地缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_041",
+      "description": "飞书运行日志",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Feishu\\\\\\\\Logs",
+      "risk_level": "LOW",
+      "category": "social_cache",
+      "ai_advice": "自动识别的 飞书运行日志 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_042",
+      "description": "飞书漫游缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*LarkShell\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "social_cache",
+      "ai_advice": "自动识别的 飞书漫游缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_043",
+      "description": "西瓜视频 PC 缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*XiguaVideo\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "av_cache",
+      "ai_advice": "自动识别的 西瓜视频 PC 缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_044",
+      "description": "今日头条 PC 缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*NewsArticle\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "av_cache",
+      "ai_advice": "自动识别的 今日头条 PC 缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_045",
+      "description": "钉钉本地缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*DingTalk\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "social_cache",
+      "ai_advice": "自动识别的 钉钉本地缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_046",
+      "description": "钉钉临时文件",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*DingTalk\\\\\\\\Temp",
+      "risk_level": "LOW",
+      "category": "social_cache",
+      "ai_advice": "自动识别的 钉钉临时文件 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_047",
+      "description": "阿里旺旺临时文件",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*AliWangWang\\\\\\\\Temp",
+      "risk_level": "LOW",
+      "category": "social_cache",
+      "ai_advice": "自动识别的 阿里旺旺临时文件 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_048",
+      "description": "千牛工作台缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*AliWorkbench\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "social_cache",
+      "ai_advice": "自动识别的 千牛工作台缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_049",
+      "description": "支付宝 PC 版缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Alipay\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "social_cache",
+      "ai_advice": "自动识别的 支付宝 PC 版缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_050",
+      "description": "阿里云盘缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*aDrive\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "cloud_cache",
+      "ai_advice": "自动识别的 阿里云盘缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_051",
+      "description": "阿里云盘日志",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*aDrive\\\\\\\\Logs",
+      "risk_level": "LOW",
+      "category": "cloud_cache",
+      "ai_advice": "自动识别的 阿里云盘日志 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_052",
+      "description": "百度网盘缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Baidu\\\\\\\\BaiduNetdisk\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "cloud_cache",
+      "ai_advice": "自动识别的 百度网盘缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_053",
+      "description": "百度网盘临时文件",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Baidu\\\\\\\\BaiduNetdisk\\\\\\\\Temp",
+      "risk_level": "LOW",
+      "category": "cloud_cache",
+      "ai_advice": "自动识别的 百度网盘临时文件 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_054",
+      "description": "百度网盘缩略图",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Baidu\\\\\\\\BaiduNetdisk\\\\\\\\Thumbnail",
+      "risk_level": "LOW",
+      "category": "cloud_cache",
+      "ai_advice": "自动识别的 百度网盘缩略图 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_055",
+      "description": "百度输入法缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Baidu\\\\\\\\BaiduPinyin\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "system_cache",
+      "ai_advice": "自动识别的 百度输入法缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_056",
+      "description": "百度浏览器缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Baidu\\\\\\\\BaiduBrowser.*\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "browser_cache",
+      "ai_advice": "自动识别的 百度浏览器缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_057",
+      "description": "网易云音乐缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Netease\\\\\\\\CloudMusic.*\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "av_cache",
+      "ai_advice": "自动识别的 网易云音乐缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_058",
+      "description": "网易云音乐临时文件",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Netease\\\\\\\\CloudMusic\\\\\\\\Temp",
+      "risk_level": "LOW",
+      "category": "av_cache",
+      "ai_advice": "自动识别的 网易云音乐临时文件 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_059",
+      "description": "有道云笔记缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Netease\\\\\\\\YoudaoNote\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "office_cache",
+      "ai_advice": "自动识别的 有道云笔记缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_060",
+      "description": "有道词典缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Youdao\\\\\\\\YoudaoDict\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "office_cache",
+      "ai_advice": "自动识别的 有道词典缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_061",
+      "description": "网易游戏平台缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Netease\\\\\\\\Launcher\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "game_cache",
+      "ai_advice": "自动识别的 网易游戏平台缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_062",
+      "description": "WPS Office 临时文件",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Kingsoft\\\\\\\\WPS Office\\\\\\\\temp",
+      "risk_level": "LOW",
+      "category": "office_cache",
+      "ai_advice": "自动识别的 WPS Office 临时文件 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_063",
+      "description": "WPS 内置组件缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Kingsoft\\\\\\\\WPS Office\\\\\\\\js\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "office_cache",
+      "ai_advice": "自动识别的 WPS 内置组件缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_064",
+      "description": "WPS 云文档本地缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Kingsoft\\\\\\\\CloudCache",
+      "risk_level": "LOW",
+      "category": "office_cache",
+      "ai_advice": "自动识别的 WPS 云文档本地缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_065",
+      "description": "哔哩哔哩 PC 版缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*bilibili\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "av_cache",
+      "ai_advice": "自动识别的 哔哩哔哩 PC 版缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_066",
+      "description": "哔哩哔哩 PC 临时文件",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Bilibili\\\\\\\\Temp",
+      "risk_level": "LOW",
+      "category": "av_cache",
+      "ai_advice": "自动识别的 哔哩哔哩 PC 临时文件 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_067",
+      "description": "爱奇艺 PC 版缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*iQIYI\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "av_cache",
+      "ai_advice": "自动识别的 爱奇艺 PC 版缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_068",
+      "description": "爱奇艺 PC 临时缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*iQIYI\\\\\\\\Temp",
+      "risk_level": "LOW",
+      "category": "av_cache",
+      "ai_advice": "自动识别的 爱奇艺 PC 临时缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_069",
+      "description": "优酷 PC 版缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Youku\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "av_cache",
+      "ai_advice": "自动识别的 优酷 PC 版缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_070",
+      "description": "芒果TV PC 缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*MangoTV\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "av_cache",
+      "ai_advice": "自动识别的 芒果TV PC 缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_071",
+      "description": "斗鱼直播 PC 缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*DouyuLive\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "av_cache",
+      "ai_advice": "自动识别的 斗鱼直播 PC 缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_072",
+      "description": "虎牙直播 PC 缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*HuyaClient\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "av_cache",
+      "ai_advice": "自动识别的 虎牙直播 PC 缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_073",
+      "description": "酷狗音乐缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Kugou\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "av_cache",
+      "ai_advice": "自动识别的 酷狗音乐缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_074",
+      "description": "酷我音乐缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*KuGou\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "av_cache",
+      "ai_advice": "自动识别的 酷我音乐缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_075",
+      "description": "喜马拉雅 PC 缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Ximalaya\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "av_cache",
+      "ai_advice": "自动识别的 喜马拉雅 PC 缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_076",
+      "description": "Steam 预载数据与分发缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Steam\\\\\\\\depotcache",
+      "risk_level": "LOW",
+      "category": "game_cache",
+      "ai_advice": "自动识别的 Steam 预载数据与分发缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_077",
+      "description": "Epic 平台清单缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Epic\\\\\\\\EpicGamesLauncher\\\\\\\\Manifests",
+      "risk_level": "LOW",
+      "category": "game_cache",
+      "ai_advice": "自动识别的 Epic 平台清单缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_078",
+      "description": "暴雪战网平台缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Battle\\\\.net\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "game_cache",
+      "ai_advice": "自动识别的 暴雪战网平台缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_079",
+      "description": "GOG Galaxy 平台缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*GOG\\\\.com\\\\\\\\Galaxy\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "game_cache",
+      "ai_advice": "自动识别的 GOG Galaxy 平台缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_080",
+      "description": "Ubisoft Connect 缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Ubisoft\\\\\\\\Ubisoft Game Launcher\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "game_cache",
+      "ai_advice": "自动识别的 Ubisoft Connect 缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_081",
+      "description": "EA Origin 平台缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Origin\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "game_cache",
+      "ai_advice": "自动识别的 EA Origin 平台缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_082",
+      "description": "天翼云盘等泛云盘缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*CloudDrive\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "cloud_cache",
+      "ai_advice": "自动识别的 天翼云盘等泛云盘缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_083",
+      "description": "115网盘 PC 缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*115\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "cloud_cache",
+      "ai_advice": "自动识别的 115网盘 PC 缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_084",
+      "description": "夸克网盘 PC 缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Quark\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "cloud_cache",
+      "ai_advice": "自动识别的 夸克网盘 PC 缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_085",
+      "description": "OneDrive 日志数据",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Microsoft\\\\\\\\OneDrive.*\\\\\\\\logs",
+      "risk_level": "LOW",
+      "category": "cloud_cache",
+      "ai_advice": "自动识别的 OneDrive 日志数据 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_086",
+      "description": "Python Pip 依赖包安装缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*pip\\\\\\\\cache",
+      "risk_level": "LOW",
+      "category": "dev_cache",
+      "ai_advice": "自动识别的 Python Pip 依赖包安装缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_087",
+      "description": "Node.js Yarn 缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Yarn\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "dev_cache",
+      "ai_advice": "自动识别的 Node.js Yarn 缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_088",
+      "description": ".NET NuGet 包缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*NuGet\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "dev_cache",
+      "ai_advice": "自动识别的 .NET NuGet 包缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_089",
+      "description": "Node.js Pnpm 缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*pnpm-cache",
+      "risk_level": "LOW",
+      "category": "dev_cache",
+      "ai_advice": "自动识别的 Node.js Pnpm 缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_090",
+      "description": "Gradle 构建缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*\\\\.gradle\\\\\\\\caches",
+      "risk_level": "LOW",
+      "category": "dev_cache",
+      "ai_advice": "自动识别的 Gradle 构建缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_091",
+      "description": "Maven 远程元数据缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*\\\\.m2\\\\\\\\repository\\\\\\\\_remote\\\\.repositories",
+      "risk_level": "LOW",
+      "category": "dev_cache",
+      "ai_advice": "自动识别的 Maven 远程元数据缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_092",
+      "description": "Golang Mod 模块缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*go\\\\\\\\pkg\\\\\\\\mod\\\\\\\\cache",
+      "risk_level": "LOW",
+      "category": "dev_cache",
+      "ai_advice": "自动识别的 Golang Mod 模块缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_093",
+      "description": "Rust Cargo 依赖库缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*\\\\.cargo\\\\\\\\registry\\\\\\\\cache",
+      "risk_level": "LOW",
+      "category": "dev_cache",
+      "ai_advice": "自动识别的 Rust Cargo 依赖库缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_094",
+      "description": "HuggingFace AI 模型缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*\\\\.cache\\\\\\\\huggingface",
+      "risk_level": "LOW",
+      "category": "dev_cache",
+      "ai_advice": "自动识别的 HuggingFace AI 模型缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_095",
+      "description": "Bun 包管理器缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*\\\\.bun\\\\\\\\install\\\\\\\\cache",
+      "risk_level": "LOW",
+      "category": "dev_cache",
+      "ai_advice": "自动识别的 Bun 包管理器缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_096",
+      "description": "JetBrains IDE (IntelliJ/PyCharm/WebStorm) 缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*JetBrains.*\\\\\\\\caches",
+      "risk_level": "LOW",
+      "category": "dev_cache",
+      "ai_advice": "自动识别的 JetBrains IDE (IntelliJ/PyCharm/WebStorm) 缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_097",
+      "description": "JetBrains Toolbox 包管理缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*JetBrains\\\\\\\\Toolbox\\\\\\\\apps",
+      "risk_level": "LOW",
+      "category": "dev_cache",
+      "ai_advice": "自动识别的 JetBrains Toolbox 包管理缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_098",
+      "description": "Android Studio IDE 缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*AndroidStudio.*\\\\\\\\caches",
+      "risk_level": "LOW",
+      "category": "dev_cache",
+      "ai_advice": "自动识别的 Android Studio IDE 缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_099",
+      "description": "Android SDK 临时缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Android\\\\\\\\Sdk\\\\\\\\temp",
+      "risk_level": "LOW",
+      "category": "dev_cache",
+      "ai_advice": "自动识别的 Android SDK 临时缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_100",
+      "description": "Cursor AI 编辑器缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Cursor\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "dev_cache",
+      "ai_advice": "自动识别的 Cursor AI 编辑器缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_101",
+      "description": "VS Code 扩展代码缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Code\\\\\\\\Cached",
+      "risk_level": "LOW",
+      "category": "dev_cache",
+      "ai_advice": "自动识别的 VS Code 扩展代码缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_102",
+      "description": "GitHub Desktop 客户端缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*GitHubDesktop\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "dev_cache",
+      "ai_advice": "自动识别的 GitHub Desktop 客户端缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_103",
+      "description": "GitKraken 客户端缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*GitKraken\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "dev_cache",
+      "ai_advice": "自动识别的 GitKraken 客户端缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_104",
+      "description": "Sourcetree 客户端缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Atlassian\\\\\\\\Sourcetree\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "dev_cache",
+      "ai_advice": "自动识别的 Sourcetree 客户端缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_105",
+      "description": "搜狗输入法缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*SogouInput\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "system_cache",
+      "ai_advice": "自动识别的 搜狗输入法缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_106",
+      "description": "QQ 拼音输入法缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Tencent\\\\\\\\QQPinyin\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "system_cache",
+      "ai_advice": "自动识别的 QQ 拼音输入法缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_107",
+      "description": "微软拼音输入法缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Microsoft\\\\\\\\InputMethod\\\\\\\\Chs",
+      "risk_level": "LOW",
+      "category": "system_cache",
+      "ai_advice": "自动识别的 微软拼音输入法缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_108",
+      "description": "Adobe 媒体公共缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Adobe\\\\\\\\Common\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "office_cache",
+      "ai_advice": "自动识别的 Adobe 媒体公共缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_109",
+      "description": "Adobe 媒体缓存核心文件",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Adobe\\\\\\\\Common\\\\\\\\Media Cache",
+      "risk_level": "LOW",
+      "category": "office_cache",
+      "ai_advice": "自动识别的 Adobe 媒体缓存核心文件 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_110",
+      "description": "Adobe (PS/LR 等) 独立缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Adobe\\\\\\\\.*\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "office_cache",
+      "ai_advice": "自动识别的 Adobe (PS/LR 等) 独立缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_111",
+      "description": "Figma PC 客户端缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Figma\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "office_cache",
+      "ai_advice": "自动识别的 Figma PC 客户端缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_112",
+      "description": "Sketch PC 客户端缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Sketch\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "office_cache",
+      "ai_advice": "自动识别的 Sketch PC 客户端缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_113",
+      "description": "XMind 思维导图缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*XMind\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "office_cache",
+      "ai_advice": "自动识别的 XMind 思维导图缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_114",
+      "description": "蓝湖 PC 客户端缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Lanhu\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "office_cache",
+      "ai_advice": "自动识别的 蓝湖 PC 客户端缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_115",
+      "description": "墨刀 PC 客户端缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Modao\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "office_cache",
+      "ai_advice": "自动识别的 墨刀 PC 客户端缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_116",
+      "description": "UWP 应用临时与沙盒缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Packages\\\\\\\\[^\\\\\\\\]+\\\\\\\\(LocalCache|AC|TempState)",
+      "risk_level": "LOW",
+      "category": "app_cache",
+      "ai_advice": "自动识别的 UWP 应用临时与沙盒缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "auto_ext_117",
+      "description": "UWP 应用本地状态缓存",
+      "pattern": "^[Cc]:\\\\(Users\\\\[^\\\\]+\\\\|Windows\\\\|ProgramData\\\\|Program Files( \\(x86\\))?\\\\)?.*Packages\\\\\\\\[^\\\\\\\\]+\\\\\\\\LocalState\\\\\\\\Cache",
+      "risk_level": "LOW",
+      "category": "app_cache",
+      "ai_advice": "自动识别的 UWP 应用本地状态缓存 数据，确认无误可安全清理以释放空间。",
+      "is_checked_default": true
+    },
+    {
+      "id": "windows_panther",
+      "pattern": "^[Cc]:\\\\Windows\\\\Panther\\\\",
+      "risk_level": "MEDIUM",
+      "category": "system_cache",
+      "ai_advice": "Windows 系统迁移日志，可安全删除",
+      "is_checked_default": true
+    },
+    {
+      "id": "windows_prefetch_dir",
+      "pattern": "^[Cc]:\\\\Windows\\\\Prefetch\\\\",
+      "risk_level": "LOW",
+      "category": "system_cache",
+      "ai_advice": "Windows 预读取缓存目录，可安全删除",
+      "is_checked_default": true
+    },
+    {
+      "id": "windows_explorer_cache",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\AppData\\\\Local\\\\Microsoft\\\\Windows\\\\Explorer\\\\",
+      "risk_level": "LOW",
+      "category": "browser_cache",
+      "ai_advice": "Windows 资源管理器缩略图缓存，可安全删除",
+      "is_checked_default": true
+    },
+    {
+      "id": "windows_inet_cache",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\AppData\\\\Local\\\\Microsoft\\\\Windows\\\\INetCache\\\\",
+      "risk_level": "LOW",
+      "category": "browser_cache",
+      "ai_advice": "Windows Internet 临时缓存，可安全删除",
+      "is_checked_default": true
+    },
+    {
+      "id": "windows_notifications",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\AppData\\\\Local\\\\Microsoft\\\\Windows\\\\Notifications\\\\",
+      "risk_level": "LOW",
+      "category": "system_cache",
+      "ai_advice": "Windows 通知缓存，可安全删除",
+      "is_checked_default": true
+    },
+    {
+      "id": "browser_code_cache",
+      "pattern": "User Data\\\\Default\\\\Code Cache\\\\",
+      "risk_level": "LOW",
+      "category": "browser_cache",
+      "ai_advice": "浏览器代码缓存，可安全删除",
+      "is_checked_default": true
+    },
+    {
+      "id": "browser_gpu_cache",
+      "pattern": "User Data\\\\Default\\\\GPUCache\\\\",
+      "risk_level": "LOW",
+      "category": "browser_cache",
+      "ai_advice": "浏览器 GPU 缓存，可安全删除",
+      "is_checked_default": true
+    },
+    {
+      "id": "onedrive_logs",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\AppData\\\\Local\\\\Microsoft\\\\OneDrive\\\\logs\\\\",
+      "risk_level": "MEDIUM",
+      "category": "cloud_cache",
+      "ai_advice": "OneDrive 同步日志，可安全删除",
+      "is_checked_default": true
+    },
+    {
+      "id": "user_dot_cache",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\.cache\\\\",
+      "risk_level": "LOW",
+      "category": "dev_cache",
+      "ai_advice": "用户缓存目录，可安全删除",
+      "is_checked_default": true
+    },
+    {
+      "id": "cursor_cache",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\AppData\\\\Roaming\\\\Cursor\\\\Cache\\\\",
+      "risk_level": "LOW",
+      "category": "dev_cache",
+      "ai_advice": "Cursor 编辑器缓存，可安全删除",
+      "is_checked_default": true
+    },
+    {
+      "id": "cursor_cached_data",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\AppData\\\\Roaming\\\\Cursor\\\\CachedData\\\\",
+      "risk_level": "LOW",
+      "category": "dev_cache",
+      "ai_advice": "Cursor 缓存数据，可安全删除",
+      "is_checked_default": true
+    },
+    {
+      "id": "cursor_cached_extensions",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\AppData\\\\Roaming\\\\Cursor\\\\CachedExtensionVSIXs\\\\",
+      "risk_level": "LOW",
+      "category": "dev_cache",
+      "ai_advice": "Cursor 扩展安装缓存，可安全删除",
+      "is_checked_default": true
+    },
+    {
+      "id": "vscode_cached_data",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\AppData\\\\Roaming\\\\Code\\\\CachedData\\\\",
+      "risk_level": "LOW",
+      "category": "dev_cache",
+      "ai_advice": "VS Code 缓存数据，可安全删除",
+      "is_checked_default": true
+    },
+    {
+      "id": "onedrive_setup_logs",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\AppData\\\\Local\\\\Microsoft\\\\OneDrive\\\\setup\\\\logs\\\\",
+      "risk_level": "MEDIUM",
+      "category": "cloud_cache",
+      "ai_advice": "OneDrive 安装日志，可安全删除",
+      "is_checked_default": true
+    },
+    {
+      "id": "bun_install_cache",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\.bun\\\\install\\\\cache\\\\",
+      "risk_level": "LOW",
+      "category": "dev_cache",
+      "ai_advice": "Bun 包管理器安装缓存，可安全删除",
+      "is_checked_default": true
+    },
+    {
+      "id": "vscode_cached_extensions",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\AppData\\\\Roaming\\\\Code\\\\CachedExtensionVSIXs\\\\",
+      "risk_level": "LOW",
+      "category": "dev_cache",
+      "ai_advice": "VS Code 扩展安装缓存，可安全删除",
+      "is_checked_default": true
+    },
+    {
+      "id": "inputmethod_chs",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\AppData\\\\Roaming\\\\Microsoft\\\\InputMethod\\\\",
+      "risk_level": "HIGH",
+      "category": "protected",
+      "ai_advice": "微软拼音输入法用户词库，不建议删除",
+      "is_checked_default": false
+    },
+    {
+      "id": "adobe_media_cache",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\AppData\\\\Roaming\\\\Adobe\\\\Common\\\\Media Cache\\\\",
+      "risk_level": "MEDIUM",
+      "category": "app_cache",
+      "ai_advice": "Adobe 媒体缓存，可安全删除",
+      "is_checked_default": true
+    },
+    {
+      "id": "uwp_packages_root",
+      "pattern": "^[Cc]:\\\\Users\\\\[^\\\\]+\\\\AppData\\\\Local\\\\Packages\\\\$",
+      "risk_level": "HIGH",
+      "category": "protected",
+      "ai_advice": "UWP 应用根目录，不建议删除（内部缓存目录可单独清理）",
+      "is_checked_default": false
     }
   ]
 }

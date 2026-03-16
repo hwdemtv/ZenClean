@@ -4,7 +4,8 @@ import threading
 import ctypes
 from pathlib import Path
 from datetime import datetime
-from core.app_migrator import AppMigrator, APP_TARGETS
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from core.app_migrator import AppMigrator, APP_TARGETS, resolve_target_path
 from core.system_migrator import SystemMigrator
 from core.patch_analyzer import PatchCacheAnalyzer
 from config.settings import COLOR_ZEN_PRIMARY, COLOR_ZEN_TEXT_MAIN, COLOR_ZEN_TEXT_DIM
@@ -70,44 +71,87 @@ class AppMigrationView(ft.Column):
         self.update()
 
         def _task():
-            history = self.migrator.get_history()
-            sys_history = self.sys_migrator.get_history()
+            try:
+                history = self.migrator.get_history()
+                sys_history = self.sys_migrator.get_history()
 
-            cards = []
+                cards = []
 
-            # --- 中断迁移恢复提醒 (最高优先级) ---
-            interrupted = self.migrator.check_interrupted_migrations()
-            if interrupted:
-                for item in interrupted:
-                    cards.append(self._build_interrupted_alert_card(item))
+                # --- 中断迁移恢复提醒 (最高优先级) ---
+                interrupted = self.migrator.check_interrupted_migrations()
+                if interrupted:
+                    for item in interrupted:
+                        cards.append(self._build_interrupted_alert_card(item))
 
-            # --- 增量增长提醒卡片 (次优先级) ---
-            growth_items = self.migrator.check_incremental_growth()
-            if growth_items:
-                for item in growth_items:
-                    cards.append(self._build_growth_alert_card(item))
+                # --- 增量增长提醒卡片 (次优先级) ---
+                growth_items = self.migrator.check_incremental_growth()
+                if growth_items:
+                    for item in growth_items:
+                        cards.append(self._build_growth_alert_card(item))
 
-            # --- 系统级特权高危项 (置顶) ---
-            is_sys_migrated = any(h["target_id"] == "win_installer_patch_cache" for h in sys_history)
-            if not is_sys_migrated:
-                sys_card = self._build_sys_card()
-                if sys_card:
-                    cards.append(sys_card)
+                # --- 系统级特权高危项 (置顶) ---
+                is_sys_migrated = any(h["target_id"] == "win_installer_patch_cache" for h in sys_history)
+                if not is_sys_migrated:
+                    sys_card = self._build_sys_card()
+                    if sys_card:
+                        cards.append(sys_card)
 
-            # --- 常规应用项 ---
-            for target in APP_TARGETS:
-                # 检查是否已搬家
-                is_migrated = any(h["target_id"] == target.id for h in history)
-                if not is_migrated:
-                    cards.append(self._build_app_card(target))
+                # --- 常规应用项 (并行计算大小) ---
+                # 先过滤出未搬家的目标
+                unmigrated_targets = [
+                    t for t in APP_TARGETS
+                    if not any(h["target_id"] == t.id for h in history)
+                ]
 
-            # 更新历史列表
-            history_items = []
-            if is_sys_migrated:
-                history_items.append(self._build_sys_history_item(sys_history[0]))
+                # 并行计算每个目标的大小
+                target_sizes = {}
+                def _compute_size(target):
+                    size = self._get_dir_size(None, target=target)
+                    return (target.id, size)
 
-            for h in history:
-                history_items.append(self._build_history_item(h))
+                with ThreadPoolExecutor(max_workers=8) as executor:
+                    futures = {executor.submit(_compute_size, t): t for t in unmigrated_targets}
+                    for future in as_completed(futures):
+                        try:
+                            tid, size = future.result()
+                            target_sizes[tid] = size
+                        except Exception:
+                            pass
+
+                # 构建卡片（只显示有数据的）
+                hidden_count = 0
+                for target in unmigrated_targets:
+                    size = target_sizes.get(target.id, 0)
+                    if size > 0:
+                        cards.append(self._build_app_card(target, precomputed_size=size))
+                    else:
+                        hidden_count += 1
+
+                # 添加过滤统计提示
+                if hidden_count > 0:
+                    cards.append(
+                        ft.Container(
+                            col=12,
+                            content=ft.Row([
+                                ft.Icon(ft.icons.FILTER_ALT, size=16, color=COLOR_ZEN_TEXT_DIM),
+                                ft.Text(f"已隐藏 {hidden_count} 个未检测到数据的目标", size=12, color=COLOR_ZEN_TEXT_DIM),
+                            ], spacing=5),
+                            padding=ft.padding.only(top=10),
+                        )
+                    )
+
+                # 更新历史列表
+                history_items = []
+                if is_sys_migrated:
+                    history_items.append(self._build_sys_history_item(sys_history[0]))
+
+                for h in history:
+                    history_items.append(self._build_history_item(h))
+            except Exception as e:
+                import logging
+                logging.error(f"Failed to load migration data: {e}")
+                cards = [ft.Text(f"数据加载失败: {e}", color=ft.colors.RED_400, col=12)]
+                history_items = []
 
             async def _gui_update():
                 self.grid.controls = cards if cards else [ft.Text("所有支持的应用均已搬家或未安装。", color=COLOR_ZEN_TEXT_DIM, col=12)]
@@ -305,9 +349,12 @@ class AppMigrationView(ft.Column):
             self._on_directory_picked(e, self.picker_context)
         self.picker_context = None
 
-    def _get_dir_size(self, path_template):
+    def _get_dir_size(self, path_template_or_list, target=None):
         """计算目录体积"""
-        path = Path(os.path.expandvars(path_template))
+        path_str = resolve_target_path(target) if target else None
+        if not path_str:
+            return 0
+        path = Path(path_str)
         if not path.exists():
             return 0
         total = 0
@@ -341,9 +388,9 @@ class AppMigrationView(ft.Column):
             size_bytes /= 1024
         return f"{size_bytes:.2f} PB"
 
-    def _build_app_card(self, target):
+    def _build_app_card(self, target, precomputed_size=None):
         """构建待搬家应用的卡片 - 采用宽行布局（单列）"""
-        size = self._get_dir_size(target.path_template)
+        size = precomputed_size if precomputed_size is not None else self._get_dir_size(None, target=target)
         size_str = self._fmt_size(size)
         
         return ft.Container(
@@ -397,6 +444,11 @@ class AppMigrationView(ft.Column):
             return None # 已经被映射过的理论上不应该到这，被外层过滤了
             
         size_bytes = checks.get("size_bytes", 0)
+        
+        # 优化：如果体积为 0，则不显示系统补丁建议（老板要求：没有扫描出来的项直接隐藏）
+        if size_bytes <= 0:
+            return None
+            
         size_str = self._fmt_size(size_bytes)
         can_click_admin = checks.get("is_admin", False) and checks.get("path_exists", False)
         

@@ -63,8 +63,21 @@ class MigrationView(ft.Column):
             expand=True,
         )
 
+        # 初始化 FilePicker，后续在 did_mount 挂载到 page
+        self._current_migrate_key = None
+        self._picker = ft.FilePicker(on_result=self._on_picker_result)
+
         # 在后台线程中计算目录大小（可能较慢），避免阻塞 UI
         threading.Thread(target=self._load_data, daemon=True).start()
+
+    def did_mount(self):
+        self.app.page.overlay.append(self._picker)
+        self.app.page.update()
+
+    def will_unmount(self):
+        if self._picker in self.app.page.overlay:
+            self.app.page.overlay.remove(self._picker)
+            self.app.page.update()
 
     # ── 数据加载 ──────────────────────────────────────────────────────────────
 
@@ -184,55 +197,91 @@ class MigrationView(ft.Column):
     def _on_migrate(self, e, reg_key: str, current_path: str) -> None:
         """
         点击"迁移"按钮后弹出目录选择器，用户确认目标盘后执行迁移。
-        第一阶段：弹 FilePicker 让用户选择目标根目录，然后调用 MigrationPlan。
         """
-        def _pick_result(ev: ft.FilePickerResultEvent):
-            if not ev.path:
-                return
-            import threading
-            from pathlib import Path
-            from core.migration import MigrationPlan
+        from core.logger import logger
+        logger.info(f"迁移按钮被点击: key={reg_key}, path={current_path}")
+        self._current_migrate_key = reg_key
+        try:
+            self._picker.get_directory_path(dialog_title="选择目标目录（请选择非 C 盘）")
+        except Exception as exc:
+            logger.error(f"FilePicker 启动失败: {exc}", exc_info=True)
+            self.app.page.snack_bar = ft.SnackBar(
+                ft.Text(f"无法打开目录选择器：{exc}"),
+                bgcolor=ft.colors.RED_900,
+            )
+            self.app.page.snack_bar.open = True
+            self.app.page.update()
 
-            dst_base = Path(ev.path)
+    def _on_picker_result(self, ev: ft.FilePickerResultEvent):
+        from core.logger import logger
+        if not ev.path:
+            logger.info("用户取消了目录选择")
+            self._current_migrate_key = None
+            return
 
-            def _run():
-                try:
-                    plan = MigrationPlan([reg_key], dst_base, create_junction=True)
-                    report = plan.preflight()
-                    if not report.ok:
-                        self.app.page.snack_bar = ft.SnackBar(
-                            ft.Text("前置检查未通过：" + "；".join(report.issues)),
-                            bgcolor=ft.colors.RED_900,
-                        )
-                        self.app.page.snack_bar.open = True
-                        self.app.page.update()
-                        return
-                    plan.execute()
+        if not getattr(self, "_current_migrate_key", None):
+            return
+
+        reg_key = self._current_migrate_key
+        self._current_migrate_key = None
+
+        import threading
+        from pathlib import Path
+        from core.migration import MigrationPlan, SHELL_FOLDER_KEYS
+
+        dst_base = Path(ev.path)
+        label = SHELL_FOLDER_KEYS.get(reg_key, reg_key)
+        logger.info(f"用户选择目标目录: {dst_base}")
+
+        # 立即显示进度提示
+        self.app.page.snack_bar = ft.SnackBar(
+            ft.Row([
+                ft.ProgressRing(width=16, height=16, stroke_width=2, color="white"),
+                ft.Text(f"正在迁移「{label}」...", color="white"),
+            ], spacing=10),
+            bgcolor=ft.colors.BLUE_700,
+            duration=60000,
+        )
+        self.app.page.snack_bar.open = True
+        self.app.page.update()
+
+        def _run():
+            try:
+                plan = MigrationPlan([reg_key], dst_base)
+                report = plan.preflight()
+                if not report.ok:
+                    logger.warning(f"前置检查未通过: {report.issues}")
                     self.app.page.snack_bar = ft.SnackBar(
-                        ft.Text(f"搬家完成！已释放约 {_fmt_size(report.total_size_bytes)}"),
-                        bgcolor=ft.colors.GREEN_800,
-                    )
-                    self.app.page.snack_bar.open = True
-                    self.app.page.update()
-                    # 刷新本视图数据
-                    self._cards_col.controls = []
-                    self._loading.visible = True
-                    self.update()
-                    threading.Thread(target=self._load_data, daemon=True).start()
-                except Exception as exc:
-                    self.app.page.snack_bar = ft.SnackBar(
-                        ft.Text(f"迁移出错：{exc}"),
+                        ft.Text("前置检查未通过：" + "；".join(report.issues)),
                         bgcolor=ft.colors.RED_900,
                     )
                     self.app.page.snack_bar.open = True
                     self.app.page.update()
+                    return
+                logger.info(f"前置检查通过，开始迁移 ({report.total_size_gb:.2f} GB)")
+                plan.execute()
+                logger.info(f"迁移完成: {label}")
+                self.app.page.snack_bar = ft.SnackBar(
+                    ft.Text(f"搬家完成！已释放约 {_fmt_size(report.total_size_bytes)}"),
+                    bgcolor=ft.colors.GREEN_800,
+                )
+                self.app.page.snack_bar.open = True
+                self.app.page.update()
+                # 刷新本视图数据
+                self._cards_col.controls = []
+                self._loading.visible = True
+                self.app.page.update()
+                threading.Thread(target=self._load_data, daemon=True).start()
+            except Exception as exc:
+                logger.error(f"迁移出错: {exc}", exc_info=True)
+                self.app.page.snack_bar = ft.SnackBar(
+                    ft.Text(f"迁移出错：{exc}"),
+                    bgcolor=ft.colors.RED_900,
+                )
+                self.app.page.snack_bar.open = True
+                self.app.page.update()
 
-            threading.Thread(target=_run, daemon=True).start()
-
-        picker = ft.FilePicker(on_result=_pick_result)
-        self.app.page.overlay.append(picker)
-        self.app.page.update()
-        picker.get_directory_path(dialog_title="选择目标目录（请选择非 C 盘）")
+        threading.Thread(target=_run, daemon=True).start()
 
     # ── 还原触发 ──────────────────────────────────────────────────────────────
 
@@ -250,9 +299,24 @@ class MigrationView(ft.Column):
             dlg.open = False
             self.app.page.update()
 
+            # 立即显示正在还原的状态
+            self.app.page.snack_bar = ft.SnackBar(
+                ft.Row([
+                    ft.ProgressRing(width=16, height=16, stroke_width=2, color="white"),
+                    ft.Text(f"正在还原「{label}」到 C 盘...", color="white"),
+                ], spacing=10),
+                bgcolor=ft.colors.BLUE_700,
+                duration=30000,  # 长时显示
+            )
+            self.app.page.snack_bar.open = True
+            self.app.page.update()
+
             def _run():
+                from core.logger import logger
                 try:
+                    logger.info(f"开始还原 [{label}] (key={reg_key})")
                     msg = restore_folder(reg_key)
+                    logger.info(f"还原结果: {msg}")
                     self.app.page.snack_bar = ft.SnackBar(
                         ft.Text(msg), bgcolor=ft.colors.GREEN_800,
                     )
@@ -264,6 +328,7 @@ class MigrationView(ft.Column):
                     self.update()
                     threading.Thread(target=self._load_data, daemon=True).start()
                 except Exception as exc:
+                    logger.error(f"还原失败 [{label}]: {exc}", exc_info=True)
                     self.app.page.snack_bar = ft.SnackBar(
                         ft.Text(f"还原失败：{exc}"), bgcolor=ft.colors.RED_900,
                     )
