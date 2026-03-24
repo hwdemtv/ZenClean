@@ -157,8 +157,41 @@
     background: rgba(0,0,0,0.05);
 }
 
+/* ==================== 浅色模式对比度增强 (强制覆盖) ==================== */
+body.light-mode .hero-subtext, 
+[data-theme="light"] .hero-subtext, 
+body.light-mode .reveal-subtext, 
+[data-theme="light"] .reveal-subtext {
+    color: #000000 !important;
+    font-weight: 600;
+}
 
+/* 给 Hero 增加白色半透明层以提升文字识别度 */
+body.light-mode .hero::after,
+[data-theme="light"] .hero::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.75);
+    z-index: 1;
+}
 
+body.light-mode .hero-content,
+[data-theme="light"] .hero-content {
+    position: relative;
+    z-index: 10;
+}
+
+/* 强制重置 FAQ 区域背景 */
+body.light-mode .faq-section,
+[data-theme="light"] .faq-section {
+    background: #ffffff !important;
+}
+
+body.light-mode .faq-section h2,
+[data-theme="light"] .faq-section h2 {
+    color: #000000 !important;
+}
 /* ==================== 本地字体定义 ==================== */
 @font-face {
     font-family: 'Outfit';

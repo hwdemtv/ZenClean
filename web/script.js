@@ -20,16 +20,40 @@
     }
 
     // ==================== 主题切换 ====================
-    function initTheme() {
-        const toggle = document.querySelector('.theme-toggle');
-        if (!toggle) return;
+    window.toggleTheme = function() {
+        const html = document.documentElement;
+        const current = html.getAttribute('data-theme') || 'dark';
+        const next = current === 'dark' ? 'light' : 'dark';
+        
+        html.setAttribute('data-theme', next);
+        localStorage.setItem('theme', next);
+        
+        // 同时更新 body 类名以双重保障 CSS 选择器生效
+        if (next === 'light') {
+            document.body.classList.add('light-mode');
+        } else {
+            document.body.classList.remove('light-mode');
+        }
+    };
 
-        toggle.addEventListener('click', () => {
-            const current = document.documentElement.getAttribute('data-theme');
-            const next = current === 'dark' ? 'light' : 'dark';
-            document.documentElement.setAttribute('data-theme', next);
-            localStorage.setItem('theme', next);
-        });
+    function initTheme() {
+        // 同步初始状态至 HTML 属性及 Body 类名
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        if (savedTheme === 'light') {
+            document.body.classList.add('light-mode');
+        }
+
+        const toggle = document.querySelector('.theme-toggle');
+        if (toggle) {
+            // 支持 HTML 中的内联 onclick="toggleTheme()"
+            toggle.addEventListener('click', () => {
+                // 如果内联调用未生效，则手动触发
+                if (typeof window.toggleTheme === 'function') {
+                    // 避免重复调用（如果 onclick 已经定义）
+                }
+            });
+        }
     }
 
     // ==================== FAQ 折叠 ====================
