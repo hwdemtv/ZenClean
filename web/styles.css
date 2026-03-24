@@ -924,10 +924,10 @@ h2 {
     display: block;
 }
 
-/* ==================== FAQ 常见问题 ==================== */
 .faq-section {
     padding: 100px 0;
-    background: #000;
+    background: var(--bg-dark); /* 使用变量以便主题切换自动响应 */
+    position: relative;
 }
 
 /* .faq-container style removed here and moved to optimization section at bottom */
