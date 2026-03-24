@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <!-- Baidu verification (keep for Chinese traffic) -->
+    <meta name="baidu-site-verification" content="codeva-coLVrzvbJs" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="ZenClean - Free professional C drive cleaner for Windows 10/11. Fix C drive full/red issues with AI-powered smart scanning. Zero-loss app migration for WeChat/QQ/Docker/VSCode/Steam. Portable, no ads, no bloatware. 72-hour recovery vault prevents accidental deletion. Free up tens of GB instantly. Download latest version from official site.">
+    <meta name="keywords" content="ZenClean,ZenClean download,ZenClean official,ZenClean portable,free C drive cleaner,C drive full fix,C drive red fix,disk cleanup tool,Windows cleaner software,Win10 C drive cleaner,Win11 C drive cleaner,system optimizer,app migration tool,move apps to D drive,WeChat migration,Steam game mover,Docker migration,VSCode move,AI PC cleaner,disk space analyzer,free up C drive space,portable cleaner,no ads,no bloatware">
+    <meta name="author" content="Huwei Spiral Team">
+
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://zenclean.hwdemtv.com/en/">
+    
+    <!-- Hreflang for SEO -->
+    <link rel="alternate" hreflang="zh-CN" href="https://zenclean.hwdemtv.com/">
+    <link rel="alternate" hreflang="en" href="https://zenclean.hwdemtv.com/en/">
+    <link rel="alternate" hreflang="x-default" href="https://zenclean.hwdemtv.com/">
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="ZenClean - Free C Drive Cleaner | AI-Powered Download">
+    <meta property="og:description" content="AI-powered smart scanning meets deep system cleaning. Bring Zen-like purity to your Windows system.">
+    <meta property="og:image" content="https://zenclean.hwdemtv.com/assets/hero_bg.png">
+    <meta property="og:image:width" content="1920">
+    <meta property="og:image:height" content="1080">
+    <meta property="og:image:alt" content="ZenClean Dashboard - Professional C Drive Cleaner">
+    <meta property="og:url" content="https://zenclean.hwdemtv.com/en/">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="ZenClean">
+    <meta property="og:locale" content="en_US">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="ZenClean - Redefining Windows C Drive Cleaning">
+    <meta name="twitter:description" content="AI-powered smart scanning meets deep system cleaning. Bring Zen-like purity to your Windows system.">
+    <meta name="twitter:image" content="https://zenclean.hwdemtv.com/assets/hero_bg.png">
+
+    <!-- Theme Color -->
+    <meta name="theme-color" content="#d4af37">
+    <meta name="msapplication-TileColor" content="#05070a">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="../assets/logo.png">
+    <link rel="apple-touch-icon" href="../assets/logo.png">
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="../site.webmanifest">
+
+    <title>ZenClean - Free C Drive Cleaner Download | AI-Powered Windows System Optimizer</title>
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="../styles.css">
+
+    <!-- Noto Sans SC + Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;700&family=Noto+Sans+SC:wght@300;400;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;700&family=Noto+Sans+SC:wght@300;400;700&display=swap" rel="stylesheet">
+    </noscript>
+
+    <!-- JSON-LD -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "ZenClean",
+        "description": "Professional Windows C Drive Cleaner with AI-powered smart scanning, zero-loss app migration, and 72-hour recovery vault.",
+        "url": "https://zenclean.hwdemtv.com/en/",
+        "applicationCategory": "UtilitiesApplication",
+        "operatingSystem": "Windows 10, Windows 11",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+        },
+        "author": {
+            "@type": "Organization",
+            "name": "Huwei Spiral Team",
+            "url": "https://github.com/hwdemtv"
+        },
+        "aggregateRating": {
+            "@type": "AggregateRating",
+            "ratingValue": "4.8",
+            "ratingCount": "128"
+        },
+        "softwareVersion": "0.1.4",
+        "fileSize": "50MB",
+        "screenshot": "https://zenclean.hwdemtv.com/assets/dashboard.png"
+    }
+    </script>
+    <!-- Prevent theme flash -->
+    <script id="prevent-theme-flash">
+    (function() {
+        var saved = localStorage.getItem('theme');
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (saved) {
+            document.documentElement.setAttribute('data-theme', saved);
+        } else if (!prefersDark) {
+            document.documentElement.setAttribute('data-theme', 'light');
+        }
+    })();
+    </script>
+    <!-- FAQ Schema for SEO -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+            {
+                "@type": "Question",
+                "name": "How to clean C drive when it is full? What files can ZenClean safely delete?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "ZenClean uses cloud-based AI smart triage to precisely identify C-drive bloat, distinguishing core components from useless cache (Windows Update residue, WeChat/QQ data). Safe deletion, no false positives, easily free up tens of GBs."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "Can ZenClean move C-drive apps to D drive without reinstalling?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "ZenClean's App Migration uses NTFS Junction mapping technology to move large apps and games to other drives in one click. No registry modification required - true zero-loss migration that's fast and safe."
+                }
+            },
+            {
+                "@type": "Question",
+                "name": "Is ZenClean free? Where to download?",
+                "acceptedAnswer": {
+                    "@type": "Answer",
+                    "text": "ZenClean is completely free Windows C drive cleaner. Official site zenclean.hwdemtv.com provides latest portable version download via Baidu Netdisk and Quark Drive. No installation required."
+                }
+            }
+        ]
+    }
+    </script>
+</head>
+
+<body class="landing-page">
+    <!-- Navigation -->
+    <nav class="glass-nav">
+        <div class="nav-content">
+            <div class="logo-area">
+                <picture>
+                    <source srcset="../assets/logo.webp" type="image/webp">
+                    <img src="../assets/logo.png" alt="ZenClean Logo" class="mini-logo" width="24" height="24">
+                </picture>
+                <span class="logo-text">ZenClean</span>
+            </div>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#technology">Technology</a>
+                <a href="#safety">Safety</a>
+                <a href="../" class="lang-switch">中文</a>
+                                <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme" title="Toggle theme">
+                    <span class="sun-icon">☀️</span>
+                    <span class="moon-icon">🌙</span>
+                </button>
+                <button class="btn-download-sm" onclick="openDownloadModal()">Download</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <header class="hero">
+        <picture class="hero-bg">
+            <source srcset="../assets/hero_bg.webp" type="image/webp">
+            <img src="../assets/hero_bg.png" alt="" class="hero-bg-fallback" loading="eager">
+        </picture>
+        <div class="hero-content">
+            <h1 class="reveal-text">ZenClean - Redefining C Drive Cleaning at a <span class="gold-text">New Height</span></h1>
+            <p class="reveal-subtext">AI-powered smart scanning meets deep system cleaning. Bring Zen-like purity to your Windows system.</p>
+            <div class="cta-group">
+                <button class="btn-primary-glow" onclick="openDownloadModal()">Get Latest Version</button>
+                <a href="#features" class="btn-outline">Learn More</a>
+            </div>
+            <div class="hero-mockup-container">
+                <picture>
+                    <source srcset="../assets/dashboard.webp" type="image/webp">
+                    <img src="../assets/dashboard.png" alt="ZenClean Dashboard" class="hero-mockup" width="800" height="500">
+                </picture>
+            </div>
+        </div>
+    </header>
+
+    <!-- Philosophy Section -->
+    <section id="technology" class="philosophy">
+        <div class="container">
+            <div class="philosophy-grid">
+                <div class="philo-card">
+                    <div class="philo-icon">⚡</div>
+                    <h3>Performance First</h3>
+                    <p>Async isolated engine 2.0 keeps UI buttery smooth during scans.</p>
+                </div>
+                <div class="philo-card">
+                    <div class="philo-icon">🌿</div>
+                    <h3>Zero Disruption</h3>
+                    <p>Never touches sensitive cores or useful configs like login sessions.</p>
+                </div>
+                <div class="philo-card">
+                    <div class="philo-icon">🛡️</div>
+                    <h3>Geek-Grade Depth</h3>
+                    <p>Deep system access to precisely strip legacy patches and app bloat.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Feature A: AI Scanning -->
+    <section id="features" class="feature-section inverse">
+        <div class="container flex-row">
+            <div class="content-side">
+                <div class="badge">AI-Powered</div>
+                <h2>ZenClean AI Smart Deep Scan</h2>
+                <p>Leveraging cloud-based LLMs for precise risk assessment. Fix <strong>C drive full/red</strong> issues instantly. Hundreds of thousands of files intelligently triaged for <strong>Windows 10/11</strong>. Every byte freed is safe.</p>
+                <ul class="feature-list">
+                    <li>Async message queue for UI responsiveness</li>
+                    <li>Cloud-based analysis prevents false deletions</li>
+                    <li>Multi-category grid data visualization</li>
+                </ul>
+            </div>
+            <div class="image-side">
+                <picture>
+                    <source srcset="../assets/dashboard.webp" type="image/webp">
+                    <img src="../assets/dashboard.png" alt="ZenClean Control Center" class="side-mockup" loading="lazy" width="600" height="400">
+                </picture>
+            </div>
+        </div>
+    </section>
+
+    <!-- Security Trust -->
+    <section class="security-trust">
+        <div class="container text-center">
+            <div class="badge">Safe & Transparent</div>
+            <h2>Verified Clean · Zero Risk</h2>
+            <p class="trust-desc">ZenClean has been thoroughly scanned by mainstream security software (like Huorong), ensuring no viruses, trojans, or malicious behavior. Complete peace of mind for power users.</p>
+            <div class="trust-image-container">
+                <picture>
+                    <source srcset="../assets/scan_result.webp" type="image/webp">
+                    <img src="../assets/scan_result.png" alt="Security Scan Result" class="trust-mockup" loading="lazy" width="600" height="400">
+                </picture>
+            </div>
+        </div>
+    </section>
+
+    <!-- Feature B: App Migration -->
+    <section class="feature-section">
+        <div class="container flex-row-reverse">
+            <div class="content-side">
+                <div class="badge">Geek Tech</div>
+                <h2>ZenClean Zero-Loss App Migration</h2>
+                <p>Using NTFS Junction底层 mapping technology. WeChat, Docker, VSCode and other C-drive hogs move in one click. No reinstall, zero感知.</p>
+                <ul class="feature-list">
+                    <li>Transparent path mapping at filesystem level</li>
+                    <li>Active process detection with silent suspend</li>
+                    <li>Full capacity pre-check with path guards</li>
+                </ul>
+            </div>
+            <div class="image-side">
+                <picture>
+                    <source srcset="../assets/migration_high_risk.webp" type="image/webp">
+                    <img src="../assets/migration_high_risk.png" alt="App Migration Demo" class="side-mockup" loading="lazy" width="600" height="400">
+                </picture>
+            </div>
+        </div>
+    </section>
+
+    <!-- Feature C: Time Machine -->
+    <section id="safety" class="feature-section inverse">
+        <div class="container flex-row">
+            <div class="content-side">
+                <div class="badge">Safety Isolation</div>
+                <h2>ZenClean Time Machine Recovery Vault</h2>
+                <p>Exclusive 72-hour regret period, <strong>prevent accidental deletion</strong>. All cleaned items enter a virtual isolation vault, ready for instant one-click restoration during the safety window.</p>
+                <ul class="feature-list">
+                    <li>72-hour dual-core isolation system</li>
+                    <li>Expired items auto-silently shredded</li>
+                    <li>Physical-level hard block mechanism</li>
+                </ul>
+            </div>
+            <div class="image-side">
+                <picture>
+                    <source srcset="../assets/timemachine.webp" type="image/webp">
+                    <img src="../assets/timemachine.png" alt="Time Machine" class="side-mockup" loading="lazy" width="600" height="400">
+                </picture>
+            </div>
+        </div>
+    </section>
+
+    <!-- Feature D: Deep Patch -->
+    <section class="feature-section">
+        <div class="container flex-row-reverse">
+            <div class="content-side">
+                <div class="badge">Deep System Access</div>
+                <h2>ZenClean Deep Patch Cleanup</h2>
+                <p>Venture into system禁区 to precisely strip $PatchCache and Windows Update bloat. Age-based algorithm safely releases <strong>tens of GB</strong> of locked legacy space, solving <strong>C drive full</strong> issues.</p>
+                <ul class="feature-list">
+                    <li>Native DISM API for Component Store cleanup</li>
+                    <li>Strong msiserver service takeover for deep analysis</li>
+                    <li>365-day safety isolation for driver rollback protection</li>
+                </ul>
+            </div>
+            <div class="image-side">
+                <picture>
+                    <source srcset="../assets/migration_high_risk.webp" type="image/webp">
+                    <img src="../assets/migration_high_risk.png" alt="Deep Patch Cleanup" class="side-mockup" loading="lazy" width="600" height="400">
+                </picture>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="faq-section" id="faq">
+        <div class="container">
+            <h2 class="text-center reveal">Frequently Asked Questions</h2>
+            <div class="faq-container">
+                <div class="faq-item reveal-delay-1">
+                    <button class="faq-question">
+                        <span>My C drive is full/red. What can I safely delete?</span>
+                        <i class="faq-icon">+</i>
+                    </button>
+                    <div class="faq-answer">
+                        <p>Traditional cleaners often delete system files causing crashes. ZenClean uses cloud-based <strong>AI smart triage</strong> to precisely identify C-drive bloat, distinguishing core components from useless cache (Windows Update residue, WeChat/QQ data). <strong>Safe deletion, no false positives</strong>, easily free up tens of GBs.</p>
+                    </div>
+                </div>
+                <div class="faq-item reveal-delay-2">
+                    <button class="faq-question">
+                        <span>Can I move C-drive apps to D drive without reinstalling?</span>
+                        <i class="faq-icon">+</i>
+                    </button>
+                    <div class="faq-answer">
+                        <p>Absolutely. ZenClean's "App Migration" uses <strong>NTFS Junction mapping</strong> technology to move large apps and games to other drives in one click. <strong>No registry modification</strong> required - true zero-loss migration that's fast and safe.</p>
+                    </div>
+                </div>
+                <div class="faq-item reveal-delay-3">
+                    <button class="faq-question">
+                        <span>Can ZenClean really guarantee zero false deletions?</span>
+                        <i class="faq-icon">+</i>
+                    </button>
+                    <div class="faq-answer">
+                        <p>ZenClean is built for geeks who demand <strong>zero false positives</strong>. Beyond passing security scans from Huorong and others, we pioneered the "Time Machine Recovery Vault". Cleaned items stay in 72-hour virtual isolation - any anomaly can be instantly restored. Complete peace of mind.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Download Footer -->
+    <section class="download-footer">
+        <div class="container text-center">
+            <h2>Start Your Zen Cleaning Journey</h2>
+            <p>ZenClean · <strong>Portable, no ads, no bloatware</strong>. The Essential Companion for Modern Windows Power Users</p>
+            <div class="footer-cta">
+                <button class="btn-giant" onclick="openDownloadModal()">Download Portable Version</button>
+            </div>
+            <p class="stats-footer">Freed over 10,000 TB for power users worldwide</p>
+            <p class="disclaimer">Crafted with ❤️ by Huwei Spiral Team</p>
+        </div>
+    </section>
+
+    <!-- Download Modal -->
+    <div id="downloadModal" class="modal-overlay" style="display:none;" aria-hidden="true">
+        <div class="download-modal-inner" role="dialog" aria-labelledby="downloadTitle">
+            <button class="modal-close" onclick="closeDownloadModal()" aria-label="Close">×</button>
+            <h3 id="downloadTitle">Choose Download Channel</h3>
+            <p>Select the fastest option for your location:</p>
+            <div class="download-options">
+                <a href="https://pan.baidu.com/s/1qIzGADyNp2HgyrBlpO4M7g?pwd=xyhf" target="_blank" rel="noopener" class="download-card baidu">
+                    <img src="../assets/icons/baidu.svg" alt="Baidu" class="card-icon" width="40" height="40" loading="lazy">
+                    <div class="card-text">
+                        <strong>Baidu Netdisk</strong>
+                        <span>Code: xyhf</span>
+                    </div>
+                </a>
+                <a href="https://pan.quark.cn/s/ebbf7993cf2f" target="_blank" rel="noopener" class="download-card quark">
+                    <img src="../assets/icons/quark.svg" alt="Quark" class="card-icon" width="40" height="40" loading="lazy">
+                    <div class="card-text">
+                        <strong>Quark Drive</strong>
+                        <span>Fast Direct (Recommended)</span>
+                    </div>
+                </a>
+            </div>
+            <div class="modal-footer-info">
+                <p>⚠️ Portable version - no installation required. Just extract and run.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Disclaimer Modal -->
+    <div id="disclaimerModal" class="modal-overlay" style="display:none;" aria-hidden="true">
+        <div class="download-modal-inner disclaimer-modal" role="dialog" aria-labelledby="disclaimerTitle">
+            <button class="modal-close" onclick="closeDisclaimerModal()" aria-label="Close">×</button>
+            <h3 id="disclaimerTitle">Disclaimer</h3>
+            <div class="disclaimer-content">
+                <p>Before using ZenClean, please read and understand this disclaimer:</p>
+                <ul class="disclaimer-list">
+                    <li><strong>Low-Level Risk Notice</strong>: This software involves Windows system-level operations (including NTFS Junction mapping, $PatchCache physical deletion, etc.). Developers are not liable for system crashes, blue screens, or boot failures caused by unexpected issues.</li>
+                    <li><strong>Data Safety Recommendation</strong>: While we implement strict "72-hour Time Machine" isolation, we strongly recommend backing up critical data before performing high-risk operations like Deep Cleanup.</li>
+                    <li><strong>Third-Party Disputes</strong>: This software is for system optimization only. We are not responsible for account bans, feature restrictions, or service terms conflicts that may result from migrating third-party app data.</li>
+                    <li><strong>Final Interpretation</strong>: This is an open-source geek tool. Final interpretation belongs to Huwei Spiral development team.</li>
+                </ul>
+            </div>
+            <div class="modal-footer-info">
+                <button class="btn-download-sm" onclick="closeDisclaimerModal()">I Understand the Risks</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contact Modal -->
+    <div id="contactModal" class="modal-overlay" style="display:none;" aria-hidden="true">
+        <div class="download-modal-inner contact-modal" role="dialog" aria-labelledby="contactTitle">
+            <button class="modal-close" onclick="closeContactModal()" aria-label="Close">×</button>
+            <h3 id="contactTitle">Contact Us</h3>
+            <p>Questions or suggestions? Reach out through these channels:</p>
+            <div class="contact-grid">
+                <div class="contact-item">
+                    <div class="contact-icon">⭐</div>
+                    <div class="contact-info">
+                        <strong>Star on GitHub</strong>
+                        <p>Like it? Give us a star!</p>
+                        <a href="https://github.com/hwdemtv/ZenClean" target="_blank" rel="noopener" class="contact-link">Visit GitHub</a>
+                    </div>
+                </div>
+                <div class="contact-item">
+                    <div class="contact-icon">📧</div>
+                    <div class="contact-info">
+                        <strong>Email Support</strong>
+                        <p>Feedback or business inquiries</p>
+                        <a href="mailto:hwdemtv@qq.com" class="contact-link">hwdemtv@qq.com</a>
+                    </div>
+                </div>
+                <div class="contact-item">
+                    <div class="contact-icon">📱</div>
+                    <div class="contact-info">
+                        <strong>WeChat Official Account</strong>
+                        <p>Follow "互为螺旋工具箱"</p>
+                        <div class="contact-qrcode-container">
+                            <img src="../assets/qrcode.jpg" alt="WeChat QR Code" class="contact-qrcode" loading="lazy" width="120" height="120">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer-info">
+                <p>Response time: Usually within 24 hours</p>
+            </div>
+        </div>
+    </div>
+
+    <footer class="bottom-bar">
+        <div class="container">
+            <div class="bottom-content">
+                <span>© 2026 ZenClean. All rights reserved.</span>
+                <div class="social-links">
+                    <a href="https://github.com/hwdemtv/ZenClean" target="_blank" rel="noopener">GitHub</a>
+                    <a href="javascript:void(0)" onclick="openDisclaimerModal()">Disclaimer</a>
+                    <a href="javascript:void(0)" onclick="openContactModal()">Contact</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- JS -->
+    <script src="../script.js" defer></script>
+</body>
+
+</html>

@@ -1,0 +1,23 @@
+{
+    "name": "ZenClean 禅清",
+    "short_name": "ZenClean",
+    "description": "专业的 Windows C 盘清理工具，融合 AI 智能分诊与极客底层爆破",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#05070a",
+    "theme_color": "#d4af37",
+    "orientation": "portrait-primary",
+    "icons": [
+        {
+            "src": "assets/logo.png",
+            "sizes": "any",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ],
+    "categories": ["utilities", "productivity"],
+    "lang": "zh-CN",
+    "dir": "ltr",
+    "scope": "/",
+    "prefer_related_applications": false
+}

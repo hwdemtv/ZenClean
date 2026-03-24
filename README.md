@@ -4,7 +4,7 @@
 
 现代 Windows C 盘深度清理与极致优化工具 —— 融合 AI 智能分诊与极客底层爆破，让您的系统回归“禅”意般的纯净。
 
-[![Status](https://img.shields.io/badge/Status-v0.1.4--Beta-orange?style=flat-square)](https://github.com/hwdemtv/ZenClean/releases/tag/v0.1.4-beta)
+[![Status](https://img.shields.io/badge/Status-Beta-orange?style=flat-square)](https://github.com/hwdemtv/ZenClean/releases)
 [![Python](https://img.shields.io/badge/Python-3.11+-1DD1A1?style=flat-square)](https://www.python.org/)
 [![UI](https://img.shields.io/badge/UI-Flet-white?style=flat-square)](https://flet.dev/)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
@@ -16,7 +16,7 @@
 - **靶向云端研判**: 接入云端大语言模型，精准评估系统冗余、应用残留与无效日志的风险等级，杜绝误报误删。
 - **时光机双核隔离舱**: 提供“72 小时反悔期”。误删文件支持一键原路恢复；过期隔离项目由后台守护线程自动静默粉碎。
 
-### 🚀 v0.1.5 Beta 更新日志
+### 🚀 近期更新日志
 - **[扫描] 靶点史诗级扩容**：`SCAN_TARGETS` 从 20+ 精准路径通过白皮书对齐增加至 **150+ 项**，实现对微信、QQ、抖音、飞书、各厂浏览器及开发环境缓存的全方位覆盖。
 - **[安全] 分级保护策略**：正式引入 `CRISIS` 风险等级，对聊天记录、浏览器 User Data 等核心资产实施“物理级硬阻断”，杜绝一切误删可能。
 - **[搬家] 路径探测器 2.0**：补全 `resolve_target_path` 函数，支持通过**注册表**及多候选路径自动定位微信等软件的真实数据目录。
@@ -55,7 +55,7 @@
 
 ## 🚀 极速上手 (For Users)
 
-1. 前往 [Release](https://github.com/hwdemtv/ZenClean/releases) 页面下载最新的 `ZenClean_v0.1.4_Beta_Green_Portable.zip`。
+1. 前往 [Release](https://github.com/hwdemtv/ZenClean/releases) 页面下载最新的绿色免安装版压缩包。
 2. 解压至任意目录，**双击运行 `ZenClean.exe`**。
 3. _（可选）_ 如果系统提示，请赋予管理员权限以解锁深层清理能力。
 

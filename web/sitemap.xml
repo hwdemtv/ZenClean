@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+    
+    <!-- 中文版首页 -->
+    <url>
+        <loc>https://zenclean.hwdemtv.com/</loc>
+        <lastmod>2026-03-18</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>1.0</priority>
+        <xhtml:link rel="alternate" hreflang="zh-CN" href="https://zenclean.hwdemtv.com/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://zenclean.hwdemtv.com/en/"/>
+        <xhtml:link rel="alternate" hreflang="x-default" href="https://zenclean.hwdemtv.com/"/>
+        <image:image>
+            <image:loc>https://zenclean.hwdemtv.com/assets/hero_bg.webp</image:loc>
+            <image:title>ZenClean 禅清 - 专业C盘清理工具</image:title>
+        </image:image>
+        <image:image>
+            <image:loc>https://zenclean.hwdemtv.com/assets/dashboard.webp</image:loc>
+            <image:title>ZenClean 控制中心界面</image:title>
+        </image:image>
+    </url>
+    
+    <!-- 英文版首页 -->
+    <url>
+        <loc>https://zenclean.hwdemtv.com/en/</loc>
+        <lastmod>2026-03-18</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>0.9</priority>
+        <xhtml:link rel="alternate" hreflang="zh-CN" href="https://zenclean.hwdemtv.com/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://zenclean.hwdemtv.com/en/"/>
+        <xhtml:link rel="alternate" hreflang="x-default" href="https://zenclean.hwdemtv.com/"/>
+        <image:image>
+            <image:loc>https://zenclean.hwdemtv.com/assets/hero_bg.webp</image:loc>
+            <image:title>ZenClean - Professional C Drive Cleaner</image:title>
+        </image:image>
+    </url>
+    
+    <!-- 中文版锚点页面 -->
+    <url>
+        <loc>https://zenclean.hwdemtv.com/#features</loc>
+        <lastmod>2026-03-18</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>0.8</priority>
+    </url>
+    
+    <url>
+        <loc>https://zenclean.hwdemtv.com/#faq</loc>
+        <lastmod>2026-03-18</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>0.9</priority>
+    </url>
+    
+    <url>
+        <loc>https://zenclean.hwdemtv.com/#technology</loc>
+        <lastmod>2026-03-18</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.7</priority>
+    </url>
+    
+    <url>
+        <loc>https://zenclean.hwdemtv.com/#safety</loc>
+        <lastmod>2026-03-18</lastmod>
+        <changefreq>monthly</changefreq>
+        <priority>0.7</priority>
+    </url>
+    
+    <!-- 英文版锚点页面 -->
+    <url>
+        <loc>https://zenclean.hwdemtv.com/en/#features</loc>
+        <lastmod>2026-03-18</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>0.7</priority>
+    </url>
+    
+    <url>
+        <loc>https://zenclean.hwdemtv.com/en/#faq</loc>
+        <lastmod>2026-03-18</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>0.8</priority>
+    </url>
+</urlset>

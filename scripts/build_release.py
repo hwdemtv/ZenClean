@@ -8,7 +8,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 BUILD_DIR = PROJECT_ROOT / "build"
 DIST_DIR = PROJECT_ROOT / "dist"
-RELEASE_DIR = PROJECT_ROOT / "release_build"
+RELEASE_DIR = PROJECT_ROOT / "dist"
 SPEC_FILE = PROJECT_ROOT / "zenclean.spec"
 
 def clean_old_builds():

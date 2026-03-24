@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where ffmpeg:*)",
+      "Bash(where magick:*)",
+      "Bash(python -c \"from PIL import Image; print\\(''Pillow available''\\)\")",
+      "Bash(pip show:*)",
+      "Bash(curl -sL -o \"Outfit-Light.woff2\" \"https://fonts.gstatic.com/s/outfit/v11/QGYvz_MVcBeNP4NJtEtqUYLknw.woff2\")",
+      "Bash(curl -sL -o \"Outfit-Regular.woff2\" \"https://fonts.gstatic.com/s/outfit/v11/QGYvz_MVcBeNP4NJtEtqUYLknw.woff2\")",
+      "Bash(curl -sL -o \"Outfit-SemiBold.woff2\" \"https://fonts.gstatic.com/s/outfit/v11/QGYyz_MVcBeNP4NJtEtqUYLktH4.ttf\")",
+      "Bash(curl -s \"https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Noto+Sans+SC:wght@300;400;700&display=swap\" -H \"User-Agent: Mozilla/5.0 \\(Windows NT 10.0; Win64; x64\\) AppleWebKit/537.36\")",
+      "Bash(scp:*)",
+      "Bash(tar czf:*)",
+      "Bash(ssh -o StrictHostKeyChecking=no root@118.178.106.157 \"cd /www/wwwroot/zenclean.hwdemtv.com && tar xzf -\")",
+      "Bash(ssh -o StrictHostKeyChecking=no -o PreferredAuthentications=keyboard-interactive,password root@118.178.106.157 \"ls -la /www/wwwroot/zenclean.hwdemtv.com/\")",
+      "Bash(scoop install:*)",
+      "Bash(sshpass -V)",
+      "Bash(sshpass:*)",
+      "Bash(curl -s -I https://zenclean.hwdemtv.com)",
+      "Bash(curl -sI https://zenclean.hwdemtv.com/styles.css)",
+      "Bash(curl -sI https://zenclean.hwdemtv.com/script.js)",
+      "Bash(curl -sI https://zenclean.hwdemtv.com/assets/logo.png)",
+      "Bash(curl -sI https://zenclean.hwdemtv.com/)"
+    ]
+  }
+}
