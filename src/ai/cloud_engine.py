@@ -28,6 +28,7 @@ from config.settings import (
 )
 import uuid
 from core.auth import _generate_api_signature
+from .batch_processor import batch_processor
 
 # ── 线程安全的目录级缓存 ──────────────────────────────────────────────────────
 # 同一目录下的数千个缓存文件共享同一判定结果，避免重复请求
@@ -168,12 +169,75 @@ def _extract_risk_from_text(ai_text: str) -> dict:
     }
 
 
-def query(sanitized_path: str) -> dict:
+def _batch_analyze(paths: list[str]) -> list[dict]:
     """
-    接收来自 local_engine 的脱敏路径，通过后端代理网关请求 AI 分析。
+    实际执行批量 AI 分析的函数，由 BatchProcessor 回调。
+    """
+    if not paths: return []
 
-    返回:
-        {"risk_level": "LOW|MEDIUM|HIGH|CRISIS|UNKNOWN", "ai_advice": "..."}
+    # 获取 Token
+    token, _, _ = _load_local_token()
+    if not token:
+        logger.warning("BatchAnalyze: No token found.")
+        return []
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {token}",
+    }
+
+    # 构造批量 Prompt
+    # 智谱 AI 对 JSON 数组的理解力很好，直接要求返回 JSON 数组
+    prompt_paths = "\n".join([f"- {p}" for p in paths])
+    system_prompt = (
+        "你是一个 Windows 系统清理专家。请分析以下目录路径的风险等级（LOW/MEDIUM/HIGH/CRISIS）。\n"
+        "请务必返回一个精简的 JSON 数组格式，每个对象包含 'path' (原始路径), 'risk_level' (级别), 'ai_advice' (10字内建议)。\n"
+        "严禁返回任何 Markdown 代码块标签或多余解释。"
+    )
+    user_prompt = f"分析以下路径：\n{prompt_paths}"
+
+    payload = {
+        "model": "glm-4-flash", # 使用极速模型降低成本和延迟
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        "temperature": 0.1,
+        "stream": False # 批量模式下不使用流式
+    }
+
+    try:
+        response = requests.post(AI_ANALYZE_URL, headers=headers, json=payload, timeout=AI_REQUEST_TIMEOUT + 5)
+        response.raise_for_status()
+        
+        result_data = response.json()
+        content = result_data.get("choices", [{}])[0].get("message", {}).get("content", "[]")
+        
+        # 清理可能存在的引号和换行
+        content = content.strip().replace("```json", "").replace("```", "").strip()
+        
+        batch_results = json.loads(content)
+        if isinstance(batch_results, list):
+            # 将分析结果存入持久化缓存
+            with _cache_lock:
+                for res in batch_results:
+                    path = res.get("path")
+                    if path:
+                        _dir_cache[path] = res
+            _save_cache_to_disk()
+            return batch_results
+    except Exception as e:
+        logger.error(f"Batch AI analyze failed: {e}")
+    
+    return []
+
+# 注册处理器
+batch_processor.set_batch_handler(_batch_analyze)
+
+
+def query(sanitized_path: str, callback=None) -> dict:
+    """
+    接收来自 local_engine 的脱敏路径，通过 BatchProcessor 实现异步分析。
     """
     dir_path = _get_parent_dir(sanitized_path)
 
@@ -182,21 +246,9 @@ def query(sanitized_path: str) -> dict:
         if dir_path in _dir_cache:
             return _dir_cache[dir_path]
 
-    # 2. 客户端侧限流检查
-    if _is_rate_limited():
-        logger.warning("客户端侧 AI 请求限流触发，跳过本次请求")
-        return _fallback("客户端请求频率超限，请稍后再试。", dir_path)
-
-    # 3. 获取本地缓存的 VIP JWT Token
-    token, _, _ = _load_local_token()
-    if not token:
-        logger.warning("未找到有效的 JWT Token，无法请求 AI 网关")
-        return _fallback("请先激活 VIP 以使用云端 AI 分析功能。", dir_path)
-
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {token}",
-    }
+    # 2. 异步提交到批处理队列（不再阻塞扫描器主线程）
+    # 结果会先返回一个 "ANALYZING" 占位符，真实结果稍后通过缓存或回调填充。
+    return batch_processor.submit_async(dir_path, callback=callback)
 
     # 4. 构造请求体并计算签名
     payload = {

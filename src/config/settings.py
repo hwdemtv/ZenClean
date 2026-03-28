@@ -366,7 +366,7 @@ AI_QUOTA_URL = f"{AI_GATEWAY_BASE_URL}/quota"
 # 单次请求超时（秒）——SSE 流式传输可能需要稍长的时间
 AI_REQUEST_TIMEOUT = 8
 # 本地 60 秒内最大请求次数（客户端侧限流，与服务端限流同步）
-AI_CLIENT_RATE_LIMIT = 10
+AI_CLIENT_RATE_LIMIT = 100
 AI_CLIENT_RATE_WINDOW = 60  # 秒
 
 # ── UI 主题 (动态主题映射机制) ──────────────────────────────────────────────────

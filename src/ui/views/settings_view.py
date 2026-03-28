@@ -1,5 +1,6 @@
 import flet as ft
 from config.settings import COLOR_ZEN_BG, COLOR_ZEN_TEXT_MAIN, COLOR_ZEN_TEXT_DIM, COLOR_ZEN_PRIMARY, LOG_DIR
+from config.version import __version__ as APP_VERSION
 import os
 
 class SettingsView(ft.Column):
@@ -144,7 +145,7 @@ class SettingsView(ft.Column):
                          on_click=lambda _: None # 占位
                      ),
                 ], alignment=ft.MainAxisAlignment.CENTER, spacing=0),
-                ft.Text("ZenClean 禅清 - 互为螺旋极速体验版 (v0.1.1-Beta)", size=12, color=COLOR_ZEN_TEXT_DIM),
+                ft.Text(f"ZenClean 禅清 - 互为螺旋极速体验版 (v{APP_VERSION})", size=12, color=COLOR_ZEN_TEXT_DIM),
                 ft.Text("Copyright © 2026 HW-DEM Team. All rights reserved.", size=11, color=ft.colors.with_opacity(0.4, "onSurface")),
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=6),
             padding=ft.padding.only(top=20, bottom=30),

@@ -263,6 +263,8 @@ class ScanView(ft.Column):
             _capsule_ai
         ], alignment=ft.MainAxisAlignment.CENTER, vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
+        self._time_status_text = ft.Text("预计扫查耗时 1.8s · 深度提权模式已开启", size=11, color="#6B7280")
+
         self._action_tile = ft.Container(
             content=ft.Column([
                 ft.Text("禅清数据控制中心", size=24, weight=ft.FontWeight.W_800, color=COLOR_ZEN_TEXT_MAIN),
@@ -270,7 +272,7 @@ class ScanView(ft.Column):
                 ft.Container(height=10),
                 _center_altar,
                 ft.Container(height=10),
-                ft.Text("预计扫查耗时 1.8s · 深度提权模式已开启", size=11, color="#6B7280"),
+                self._time_status_text,
             ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, alignment=ft.MainAxisAlignment.CENTER),
             padding=ft.padding.symmetric(vertical=5, horizontal=0),
             alignment=ft.alignment.center,
@@ -504,6 +506,10 @@ class ScanView(ft.Column):
         self._status_text.value = "正在展开扫描引擎..."
         self._counter_text.value = "正在连接扫描靶标..."
         self._size_text.value = "可释放空间：计算中..."
+        
+        self._scan_start_time = time.perf_counter()
+        self._time_status_text.value = "正在初始化扫描引擎..."
+        self._time_status_text.color = COLOR_ZEN_PRIMARY
         
         self.update()
 
@@ -797,6 +803,12 @@ class ScanView(ft.Column):
     async def _handle_scan_nodes_ui(self, nodes: list[dict]) -> None:
         if not getattr(self, "_active_execution", None) or not self._active_execution.visible:
             return 
+            
+        # 实时更新扫查耗时
+        if hasattr(self, "_scan_start_time"):
+            elapsed = time.perf_counter() - self._scan_start_time
+            self._time_status_text.value = f"已耗时 {elapsed:.1f}s · 深度提权模式已开启"
+            self._time_status_text.update()
             
         self.app.scan_nodes.extend(nodes)
         total = len(self.app.scan_nodes)

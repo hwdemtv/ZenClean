@@ -21,6 +21,7 @@ from ui.views.quarantine_view import QuarantineView
 from ui.views.settings_view import SettingsView
 from ui.views.app_migration_view import AppMigrationView
 from ui.components.dialogs import show_eula_dialog
+from ai.batch_processor import batch_processor
 
 class ZenCleanApp(ft.Column):
     """
@@ -179,9 +180,21 @@ class ZenCleanApp(ft.Column):
         # 共享数据层
         self.scan_nodes: list[dict] = []
         
+        # 订阅全局 AI 分析结果通知 (异步批处理核心链路)
+        batch_processor.set_post_batch_callback(self.on_ai_batch_done)
+        
         # 启动时进行一次延时的静默版本检查广播接收
         self._start_silent_update_check()
         
+    def on_ai_batch_done(self, results_map: dict):
+        """AI 批次分析完成后的全局回调。由 BatchProcessor 触发。"""
+        # 1. 首先确保 app.scan_nodes 中的原始数据已经更新 (其实 cloud_engine 已更新内存)
+        # 2. 找到当前正在显示的视图，如果是 ResultView，通知其刷新
+        current_view = self._page_container.content
+        if hasattr(current_view, "on_ai_batch_done"):
+            # 在 UI 线程中执行
+            self.page.run_task(current_view.on_ai_batch_done, results_map)
+
     def _start_silent_update_check(self):
         import time
         import threading

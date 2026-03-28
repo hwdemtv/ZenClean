@@ -164,6 +164,7 @@ class ResultView(ft.Column):
         self._expanded_cats: dict[str, int] = {}  # 分组 category → 当前显示条数上限
         self._expanded_tile_keys: set[str] = set()  # 记录当前展开的分组 ID
         self._chart_container = ft.Container(visible=False)  # 饼图容器
+        self._file_items = {}  # 路径 -> FileListItem 实例，用于异步刷新
 
         self.lbl_total_size = ft.Text(
             "待清理: 0.00 GB",
@@ -251,6 +252,7 @@ class ResultView(ft.Column):
     def _build_data(self):
         nodes = getattr(self.app, "scan_nodes", [])
         self.groups_col.controls.clear()
+        self._file_items.clear()  # 清除旧的实例追踪
         self._total_size_bytes = 0
 
         # 计算分类统计数据用于图表
@@ -373,7 +375,11 @@ class ResultView(ft.Column):
                     self._update_ui_stats()
 
                 size_str = _fmt_size(node.get("size_bytes", 0))
-                file_controls.append(FileListItem(node, _on_row_check, size_str))
+                item = FileListItem(node, _on_row_check, size_str)
+                file_controls.append(item)
+                
+                # 记录实例，以便后续异步刷新 (这里的 key 使用 sanitized_path 对应的真实 path)
+                self._file_items[node["path"]] = item
 
             # ── 底部操作栏（合并“加载更多”与“收起”为一行） ──────────────
             remaining = total_in_cat - show_limit
@@ -431,6 +437,21 @@ class ResultView(ft.Column):
         """刷新分组数据并更新 UI（仅在已挂载后使用）"""
         self._build_data()
         self.update()
+
+    def on_ai_batch_done(self, results_map: dict):
+        """AI 异步结果返回时的局部刷新处理器"""
+        # results_map: { path: { risk_level, ai_advice, ... } }
+        updated_any = False
+        for path, result in results_map.items():
+            if path in self._file_items:
+                self._file_items[path].update_ai_result(result)
+                updated_any = True
+        
+        # 如果有任何更新，可能影响到统计（如风险等级改变导致“一键清理”逻辑变化）
+        if updated_any:
+            # 这里不调用 _load_data (太重)，只更新统计数值
+            self._update_btn_and_total_label()
+            self.update()
 
     def _update_ui_stats(self):
         """局部或全量刷新，更新统计标签和按钮文案"""
