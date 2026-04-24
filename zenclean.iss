@@ -2,7 +2,7 @@
 ; 此脚本将打包 PyInstaller 生成的 dist/ZenClean 目录
 
 #define MyAppName "ZenClean 禅清"
-#define MyAppVersion "0.1.3-Beta"
+#define MyAppVersion "0.1.7-beta"
 #define MyAppPublisher "HW-DEM Team"
 #define MyAppURL "https://github.com/hwdem"
 #define MyAppExeName "ZenClean.exe"
