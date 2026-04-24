@@ -363,9 +363,11 @@ AI_GATEWAY_BASE_URL = os.environ.get("AI_GATEWAY_BASE_URL", "https://your-licens
 AI_ANALYZE_URL = f"{AI_GATEWAY_BASE_URL}/chat/completions"
 # 额度查询端点（GET，携带 JWT Authorization）
 AI_QUOTA_URL = f"{AI_GATEWAY_BASE_URL}/quota"
-# 单次请求超时（秒）——SSE 流式传输可能需要稍长的时间
-AI_REQUEST_TIMEOUT = 8
-# 本地 60 秒内最大请求次数（客户端侧限流，与服务端限流同步）
+# 单次请求超时（秒）——批量分析包含大量路径，AI 响应需要较长时间
+AI_REQUEST_TIMEOUT = 60
+# 最大重试次数
+AI_MAX_RETRIES = 2
+# 内存 60 秒内最大请求次数（客户端侧限流，与服务端限流同步）
 AI_CLIENT_RATE_LIMIT = 100
 AI_CLIENT_RATE_WINDOW = 60  # 秒
 

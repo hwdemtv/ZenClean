@@ -18,7 +18,7 @@ class CloudBatcher:
                 cls._instance._initialized = False
             return cls._instance
 
-    def __init__(self, max_batch_size=15, max_wait_time=0.6):
+    def __init__(self, max_batch_size=8, max_wait_time=0.6):
         if hasattr(self, "_initialized") and self._initialized: return
         
         self.max_batch_size = max_batch_size
@@ -121,7 +121,12 @@ class CloudBatcher:
 
         try:
             results_list = self._batch_handler(paths)
-            results_map = {res.get("path"): res for res in results_list if "path" in res}
+            # 归一化路径匹配：Windows 大小写不敏感 + 去除末尾分隔符
+            results_map = {}
+            for res in results_list:
+                if "path" in res:
+                    norm_path = res["path"].rstrip("\\/").lower()
+                    results_map[norm_path] = res
             self._mark_batch_result(paths, results_map)
         except Exception as e:
             logger.error(f"Batch execution failed: {e}")
@@ -131,7 +136,9 @@ class CloudBatcher:
         """统一分发结果并通知"""
         with self._lock:
             for path in paths:
-                res = results_map.get(path) if results_map else None
+                # 归一化路径查找，确保 Windows 大小写不敏感匹配
+                norm_path = path.rstrip("\\/").lower()
+                res = results_map.get(norm_path) if results_map else None
                 if not res:
                     res = {"risk_level": "UNKNOWN", "ai_advice": "分析失败，可能由于网络抖动。"}
                 
@@ -155,7 +162,8 @@ class CloudBatcher:
                 try:
                     self._post_batch_cb(results_map)
                 except Exception as e:
-                    logger.error(f"Global post-batch callback error: {e}")
+                    import traceback
+                    logger.error(f"Global post-batch callback error: {e}\n{traceback.format_exc()}")
 
 # 全局单例
 batch_processor = CloudBatcher()

@@ -1,14 +1,15 @@
 """
-cloud_engine.py — ZenClean 云端 AI 分析引擎（真实后端代理网关版）
+cloud_engine.py — ZenClean 云端 AI 分析引擎（批处理版）
 
 流程：
   1. 客户端用本地缓存的 VIP JWT Token 作为 Authorization 鉴权
-  2. 将脱敏后的目录路径 POST 到 hw-license-center 的 AI 代理网关
-  3. 后端校验 JWT + 扣减今日额度 → 转发请求至智谱清言
-  4. 客户端接收 SSE 流式响应并拼装为完整文本
-  5. 从 AI 回复中提取 risk_level 和 ai_advice
+  2. 将脱敏后的目录路径通过 BatchProcessor 聚合为批量请求
+  3. 批量 POST 到智谱清言 API，非流式获取 JSON 数组响应
+  4. 结果写入内存缓存 + 持久化磁盘缓存
+  5. 通过回调链通知 UI 局部刷新
 """
 
+import os
 import time
 import json
 import requests
@@ -17,17 +18,18 @@ from typing import Dict
 from collections import deque
 
 from core.logger import logger
-from core.auth import _load_local_token
+from core.auth import _load_local_token, _generate_api_signature
 from config.settings import (
     AI_ANALYZE_URL,
     AI_QUOTA_URL,
     AI_REQUEST_TIMEOUT,
+    AI_MAX_RETRIES,
     AI_CLIENT_RATE_LIMIT,
     AI_CLIENT_RATE_WINDOW,
     AI_CACHE_FILE,
+    LICENSE_SERVER_URLS,
 )
 import uuid
-from core.auth import _generate_api_signature
 from .batch_processor import batch_processor
 
 # ── 线程安全的目录级缓存 ──────────────────────────────────────────────────────
@@ -91,48 +93,16 @@ def _is_rate_limited() -> bool:
 
 def _get_parent_dir(sanitized_path: str) -> str:
     """获取脱敏路径的父目录作为分析特征"""
-    import os
     try:
         return os.path.dirname(sanitized_path)
     except Exception:
         return sanitized_path
 
 
-def _parse_sse_stream(response: requests.Response) -> str:
-    """
-    解析 SSE (Server-Sent Events) 流式响应，拼装成完整的 AI 回复文本。
-    后端使用 OpenAI 兼容格式的 SSE：
-      data: {"choices":[{"delta":{"content":"..."}}]}
-      data: [DONE]
-    """
-    full_text = ""
-    response.encoding = 'utf-8'  # 强制使用 UTF-8 解码，防止中文乱码
-    for line in response.iter_lines(decode_unicode=True):
-        if not line or not line.startswith("data:"):
-            continue
-        payload = line[len("data:"):].strip()
-        if payload == "[DONE]":
-            break
-        try:
-            chunk = json.loads(payload)
-            # 兼容 OpenAI 标准 SSE 格式
-            choices = chunk.get("choices", [])
-            if choices:
-                delta = choices[0].get("delta", {})
-                content = delta.get("content", "")
-                if content:
-                    full_text += content
-        except json.JSONDecodeError:
-            # 非标准行，跳过
-            continue
-    return full_text
-
-
 def _extract_risk_from_text(ai_text: str) -> dict:
     """
     从 AI 大模型的自然语言回复中提取结构化的 risk_level 和 ai_advice。
-    AI 被提示返回类似 "风险等级: LOW\n建议: ..." 的格式。
-    如果无法解析则默认为 UNKNOWN。
+    作为 JSON 解析失败时的降级兜底。
     """
     # 清理可能存在的 Markdown 代码块包裹
     cleaned_text = ai_text.strip()
@@ -169,11 +139,48 @@ def _extract_risk_from_text(ai_text: str) -> dict:
     }
 
 
+def _normalize_batch_paths(batch_results: list[dict], submitted_paths: list[str]) -> list[dict]:
+    """
+    归一化 AI 返回的路径，确保与提交路径匹配。
+    AI 模型可能返回大小写或末尾分隔符不同的路径，需要统一。
+    """
+    # 构建提交路径的归一化映射：归一化路径 → 原始路径
+    normalized_submitted = {p.rstrip("\\/").lower(): p for p in submitted_paths}
+
+    for res in batch_results:
+        path = res.get("path")
+        if path:
+            normalized = path.rstrip("\\/").lower()
+            if normalized in normalized_submitted:
+                # 用提交时的原始路径替换 AI 返回的路径，确保匹配
+                res["path"] = normalized_submitted[normalized]
+
+    return batch_results
+
+
+def _build_fallback_results(paths: list[str], advice: str) -> list[dict]:
+    """为所有路径构建降级结果（用于 429/401/403 等不应重试的场景）"""
+    results = []
+    fallback_base = {"risk_level": "UNKNOWN", "ai_advice": advice}
+    with _cache_lock:
+        for path in paths:
+            res = {**fallback_base, "path": path}
+            _dir_cache[path] = res
+            results.append(res)
+    return results
+
+
 def _batch_analyze(paths: list[str]) -> list[dict]:
     """
     实际执行批量 AI 分析的函数，由 BatchProcessor 回调。
+    增强版：HTTP 状态码差异化处理 + 客户端限流 + 路径归一化 + JSON 解析降级。
     """
     if not paths: return []
+
+    # 客户端侧限流检查
+    if _is_rate_limited():
+        logger.warning("BatchAnalyze: Client rate limit exceeded, skipping batch.")
+        return []
 
     # 获取 Token
     token, _, _ = _load_local_token()
@@ -181,13 +188,7 @@ def _batch_analyze(paths: list[str]) -> list[dict]:
         logger.warning("BatchAnalyze: No token found.")
         return []
 
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {token}",
-    }
-
     # 构造批量 Prompt
-    # 智谱 AI 对 JSON 数组的理解力很好，直接要求返回 JSON 数组
     prompt_paths = "\n".join([f"- {p}" for p in paths])
     system_prompt = (
         "你是一个 Windows 系统清理专家。请分析以下目录路径的风险等级（LOW/MEDIUM/HIGH/CRISIS）。\n"
@@ -197,39 +198,121 @@ def _batch_analyze(paths: list[str]) -> list[dict]:
     user_prompt = f"分析以下路径：\n{prompt_paths}"
 
     payload = {
-        "model": "glm-4-flash", # 使用极速模型降低成本和延迟
+        "model": "glm-4-flash",
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
         ],
         "temperature": 0.1,
-        "stream": False # 批量模式下不使用流式
+        "stream": False
     }
 
-    try:
-        response = requests.post(AI_ANALYZE_URL, headers=headers, json=payload, timeout=AI_REQUEST_TIMEOUT + 5)
-        response.raise_for_status()
+    # 动态构建网关轮询列表，保证 AI_ANALYZE_URL 优先，并追加备用的授权网关路径
+    urls_to_try = [AI_ANALYZE_URL]
+    for _url in LICENSE_SERVER_URLS:
+        api_path = f"{_url.rstrip('/')}/api/v1/ai/chat/completions"
+        if api_path not in urls_to_try:
+            urls_to_try.append(api_path)
+
+    last_error = "云端 AI 服务暂不可用，无法判定风险。"
+    for attempt in range(AI_MAX_RETRIES + 1):
+        # 轮询获取一个 URL进行尝试
+        current_url = urls_to_try[attempt % len(urls_to_try)]
         
-        result_data = response.json()
-        content = result_data.get("choices", [{}])[0].get("message", {}).get("content", "[]")
-        
-        # 清理可能存在的引号和换行
-        content = content.strip().replace("```json", "").replace("```", "").strip()
-        
-        batch_results = json.loads(content)
-        if isinstance(batch_results, list):
-            # 将分析结果存入持久化缓存
-            with _cache_lock:
-                for res in batch_results:
-                    path = res.get("path")
-                    if path:
-                        _dir_cache[path] = res
-            _save_cache_to_disk()
-            return batch_results
-    except Exception as e:
-        logger.error(f"Batch AI analyze failed: {e}")
-    
-    return []
+        try:
+            # 构造签名与请求头
+            timestamp = str(int(time.time()))
+            nonce = uuid.uuid4().hex
+            # 为了确保签名一致性，手动序列化 payload (紧凑格式)
+            payload_str = json.dumps(payload, separators=(',', ':'))
+            signature = _generate_api_signature(payload_str, timestamp, nonce)
+
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {token}",
+                # 必须设置标准浏览器 User-Agent，否则会被 Cloudflare WAF 拦截
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "application/json",
+            }
+
+            response = requests.post(current_url, headers=headers, data=payload_str, timeout=AI_REQUEST_TIMEOUT)
+
+            # ── HTTP 429: 额度耗尽，不应重试 ──
+            if response.status_code == 429:
+                logger.warning("云端 AI 每日额度已耗尽或请求过频，停止重试")
+                return _build_fallback_results(paths, "今日 AI 分析额度已用完，请明日再试。")
+
+            # ── HTTP 401/403: 鉴权失败，记录后尝试下一个节点（不应立即中断，可能是当前 CDN IP 被风控） ──
+            if response.status_code in (401, 403):
+                try:
+                    # 尝试解析业务级错误消息
+                    err_json = response.json()
+                    err_msg = err_json.get("msg", "未知业务授权错误")
+                except Exception:
+                    # 如果不是 JSON，可能是 Cloudflare WAF 的 HTML 拦截页面
+                    err_msg = response.text[:200].replace("\n", " ")
+                    if "<title>Just a moment...</title>" in err_msg or "Cloudflare" in err_msg:
+                        err_msg = f"检测到 Cloudflare WAF 拦截 (可能是 IP 被风控或 Header 异常): {err_msg}"
+                
+                logger.warning(f"云端 AI 鉴权失败 (节点 {current_url}): HTTP {response.status_code} - {err_msg}")
+                last_error = f"授权验证失败: {err_msg}"
+                raise requests.exceptions.RequestException(f"{response.status_code} Forbidden: {err_msg}")
+
+            # ── HTTP 400: 请求格式错误，记录服务端返回的具体原因 ──
+            if response.status_code == 400:
+                try:
+                    err_body = response.json()
+                    logger.warning(f"云端 AI 400 Bad Request: {err_body}")
+                except Exception:
+                    logger.warning(f"云端 AI 400 Bad Request: {response.text[:500]}")
+                return _build_fallback_results(paths, "AI 请求格式错误，请更新至最新版本。")
+
+            response.raise_for_status()
+
+            result_data = response.json()
+            content = result_data.get("choices", [{}])[0].get("message", {}).get("content", "[]")
+
+            # 清理可能存在的 Markdown 代码块包裹
+            content = content.strip().replace("```json", "").replace("```", "").strip()
+
+            # 尝试解析 JSON
+            try:
+                batch_results = json.loads(content)
+            except json.JSONDecodeError:
+                # JSON 解析失败，用文本提取器兜底
+                logger.warning("Batch AI response not valid JSON, trying text extraction fallback")
+                fallback_result = _extract_risk_from_text(content)
+                # 将单个结果关联到第一个路径
+                batch_results = [{**fallback_result, "path": paths[0]}]
+
+            if isinstance(batch_results, list):
+                # 归一化路径匹配：确保 AI 返回的 path 与提交的 path 一致
+                batch_results = _normalize_batch_paths(batch_results, paths)
+
+                # 将分析结果存入持久化缓存
+                with _cache_lock:
+                    for res in batch_results:
+                        path = res.get("path")
+                        if path:
+                            _dir_cache[path] = res
+                _save_cache_to_disk()
+                return batch_results
+
+        except requests.exceptions.Timeout:
+            logger.warning(f"Batch AI analyze attempt {attempt + 1} timed out on {current_url}")
+        except requests.exceptions.ConnectionError:
+            logger.warning(f"Batch AI analyze attempt {attempt + 1} connection error on {current_url}")
+        except Exception as e:
+            logger.warning(f"Batch AI analyze attempt {attempt + 1} failed on {current_url}: {type(e).__name__}")
+
+        if attempt < AI_MAX_RETRIES:
+            # 指数退避 (1s, 2s)
+            time.sleep(1 * (attempt + 1))
+        else:
+            logger.error(f"Batch AI analyze exhausted all retries")
+
+    # 所有重试耗尽，返回降级结果
+    return _build_fallback_results(paths, last_error)
 
 # 注册处理器
 batch_processor.set_batch_handler(_batch_analyze)
@@ -238,114 +321,22 @@ batch_processor.set_batch_handler(_batch_analyze)
 def query(sanitized_path: str, callback=None) -> dict:
     """
     接收来自 local_engine 的脱敏路径，通过 BatchProcessor 实现异步分析。
+    返回的 dict 中包含 _ai_query_key 字段，用于后续回调匹配。
     """
     dir_path = _get_parent_dir(sanitized_path)
 
     # 1. 查询高速缓存
     with _cache_lock:
         if dir_path in _dir_cache:
-            return _dir_cache[dir_path]
+            result = _dir_cache[dir_path].copy()
+            result["_ai_query_key"] = dir_path
+            return result
 
     # 2. 异步提交到批处理队列（不再阻塞扫描器主线程）
     # 结果会先返回一个 "ANALYZING" 占位符，真实结果稍后通过缓存或回调填充。
-    return batch_processor.submit_async(dir_path, callback=callback)
-
-    # 4. 构造请求体并计算签名
-    payload = {
-        "messages": [
-            {
-                "role": "system",
-                "content": (
-                    "你是 Windows 系统清理专家。用户会给你一个 Windows 文件路径，"
-                    "请判断该路径下的文件是否为可安全删除的缓存/临时文件。"
-                    "请直接返回 JSON 格式：{\"risk_level\": \"LOW|MEDIUM|HIGH|CRISIS\", \"ai_advice\": \"简短描述\"}"
-                    "\n- LOW: 安全删除的缓存/临时文件"
-                    "\n- MEDIUM: 可能有用但非关键的文件"
-                    "\n- HIGH: 包含用户数据或重要配置"
-                    "\n- CRISIS: 系统关键文件，绝不可删除"
-                ),
-            },
-            {
-                "role": "user",
-                "content": f"请分析这个路径: {dir_path}",
-            },
-        ],
-        "stream": True,
-    }
-    
-    payload_str = json.dumps(payload, separators=(',', ':'))
-    timestamp = str(int(time.time()))
-    nonce = uuid.uuid4().hex
-    signature = _generate_api_signature(payload_str, timestamp, nonce)
-    
-    headers.update({
-        "X-Request-Timestamp": timestamp,
-        "X-Request-Nonce": nonce,
-        "X-Request-Signature": signature
-    })
-
-    logger.info(f"向云端 AI 网关发送分析请求: {dir_path}")
-
-    try:
-        # 5. 发送 SSE 流式请求
-        res = requests.post(
-            AI_ANALYZE_URL,
-            data=payload_str,
-            headers=headers,
-            timeout=AI_REQUEST_TIMEOUT,
-            stream=True,
-        )
-
-        if res.status_code == 200:
-            # 解析 SSE 流
-            ai_text = _parse_sse_stream(res)
-            if ai_text:
-                result = _extract_risk_from_text(ai_text)
-                logger.info(f"云端 AI 判定: {dir_path} → {result['risk_level']}")
-
-                # 写入内存缓存
-                with _cache_lock:
-                    _dir_cache[dir_path] = result
-                    
-                # 【新功能】如果判定结果不是 UNKNOWN 或出错，则持久化到硬盘，避免后续重启产生计费
-                if result["risk_level"] != "UNKNOWN":
-                    # 使用异步线程落盘，不影响当前扫描性能
-                    threading.Thread(target=_save_cache_to_disk, daemon=True).start()
-                    
-                return result
-            else:
-                logger.warning("云端 AI 返回了空响应")
-
-        elif res.status_code == 429:
-            logger.warning("云端 AI 每日额度已耗尽或请求过频")
-            return _fallback("今日 AI 分析额度已用完，请明日再试。", dir_path)
-
-        elif res.status_code in (401, 403):
-            logger.warning(f"云端 AI 鉴权失败: HTTP {res.status_code}")
-            return _fallback("[AUTH_FAILED] VIP 授权验证失败或已被吊销，请重新激活。", dir_path)
-
-        else:
-            logger.warning(f"云端 AI 请求失败: HTTP {res.status_code}")
-
-    except requests.exceptions.Timeout:
-        logger.warning(f"云端 AI 请求超时: {dir_path}")
-    except requests.exceptions.ConnectionError:
-        logger.warning("无法连接到云端 AI 网关，请检查网络")
-    except Exception as e:
-        logger.error(f"云端 AI 请求异常: {e}")
-
-    # 6. 任何异常，优雅降级
-    return _fallback("云端 AI 服务暂不可用，无法判定风险。", dir_path)
-
-
-def _fallback(advice: str, dir_path: str) -> dict:
-    """返回降级结果并写入短效缓存，防止网络故障时每个文件都卡超时"""
-    result = {
-        "risk_level": "UNKNOWN",
-        "ai_advice": advice,
-    }
-    with _cache_lock:
-        _dir_cache[dir_path] = result
+    result = batch_processor.submit_async(dir_path, callback=callback)
+    # 注入查询键，便于 UI 层回调时匹配节点
+    result["_ai_query_key"] = dir_path
     return result
 
 
@@ -363,7 +354,7 @@ def get_quota() -> dict | None:
         timestamp = str(int(time.time()))
         nonce = uuid.uuid4().hex
         signature = _generate_api_signature("", timestamp, nonce)
-        
+
         headers = {
             "Authorization": f"Bearer {token}",
             "X-Request-Timestamp": timestamp,

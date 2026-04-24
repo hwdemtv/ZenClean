@@ -160,7 +160,7 @@ class ResultView(ft.Column):
         super().__init__(expand=True)
         self.app = app
         self._total_size_bytes = 0
-        self.is_confirm_mode = False  # 是否处于“确认清理阶段”
+        self.is_confirm_mode = False  # 是否处于"确认清理阶段"
         self._expanded_cats: dict[str, int] = {}  # 分组 category → 当前显示条数上限
         self._expanded_tile_keys: set[str] = set()  # 记录当前展开的分组 ID
         self._chart_container = ft.Container(visible=False)  # 饼图容器
@@ -381,12 +381,12 @@ class ResultView(ft.Column):
                 # 记录实例，以便后续异步刷新 (这里的 key 使用 sanitized_path 对应的真实 path)
                 self._file_items[node["path"]] = item
 
-            # ── 底部操作栏（合并“加载更多”与“收起”为一行） ──────────────
+            # ── 底部操作栏（合并"加载更多"与"收起"为一行） ──────────────
             remaining = total_in_cat - show_limit
             bottom_btns = []
 
             if remaining > 0:
-                # 还有未显示的文件 -> 添加“加载更多”
+                # 还有未显示的文件 -> 添加"加载更多"
                 if remaining <= MAX_ITEMS_PER_GROUP:
                     load_text = f"📂 显示剩余 {remaining} 个文件"
                 else:
@@ -396,7 +396,7 @@ class ResultView(ft.Column):
                 )
 
             if show_limit > MAX_ITEMS_PER_GROUP:
-                # 已经加载过更多 -> 添加“收起”
+                # 已经加载过更多 -> 添加"收起"
                 bottom_btns.append(
                     ft.TextButton(
                         f"🔼 收起（仅前 {MAX_ITEMS_PER_GROUP} 个）",
@@ -416,19 +416,21 @@ class ResultView(ft.Column):
                 else:
                     self._expanded_tile_keys.discard(k)
 
-            self.groups_col.controls.append(
-                ft.ExpansionTile(
-                    title=title_row,
-                    controls=file_controls,
-                    initially_expanded=cat in self._expanded_tile_keys,
-                    on_change=_on_tile_change,
-                    bgcolor="surface",
-                    collapsed_bgcolor="surfaceVariant",
-                    shape=ft.RoundedRectangleBorder(radius=8),
-                )
+            # 优化 ExpansionTile 的样式
+            tile = ft.ExpansionTile(
+                title=title_row,
+                controls=file_controls,
+                initially_expanded=cat in self._expanded_tile_keys,
+                on_change=_on_tile_change,
+                bgcolor=ft.colors.with_opacity(0.02, ft.colors.SURFACE_VARIANT), # 内容区极浅色
+                collapsed_bgcolor=ft.colors.with_opacity(0.05, ft.colors.SURFACE_VARIANT),
+                shape=ft.RoundedRectangleBorder(radius=8),
+                collapsed_shape=ft.RoundedRectangleBorder(radius=8),
+                maintain_state=True, # 保持状态，避免滚动时反复重绘
             )
+            self.groups_col.controls.append(tile)
             # 增加分组间的间距
-            self.groups_col.controls.append(ft.Container(height=2))
+            self.groups_col.controls.append(ft.Container(height=4))
 
         # (已移除底部的 80px 隐形垫片，因为现在按钮区脱离了列表本身，成了绝对锁定的页脚)
         self._update_btn_and_total_label()
@@ -438,16 +440,33 @@ class ResultView(ft.Column):
         self._build_data()
         self.update()
 
-    def on_ai_batch_done(self, results_map: dict):
+    async def on_ai_batch_done(self, results_map: dict):
         """AI 异步结果返回时的局部刷新处理器"""
-        # results_map: { path: { risk_level, ai_advice, ... } }
+        # results_map: { dir_path: { risk_level, ai_advice, ... } }
+        # 键为目录路径，_file_items 键为完整文件路径，需要通过 _ai_query_key 桥接匹配
         updated_any = False
-        for path, result in results_map.items():
-            if path in self._file_items:
-                self._file_items[path].update_ai_result(result)
+        for item_path, item in self._file_items.items():
+            node = item.node
+            if node.get("risk_level") != "ANALYZING":
+                continue
+
+            # 优先使用 _ai_query_key 精确匹配
+            query_key = node.get("_ai_query_key")
+            if query_key and query_key in results_map:
+                item.update_ai_result(results_map[query_key])
                 updated_any = True
-        
-        # 如果有任何更新，可能影响到统计（如风险等级改变导致“一键清理”逻辑变化）
+            else:
+                # 降级匹配：路径归一化模糊匹配
+                import os
+                node_dir = os.path.dirname(item_path).rstrip("\\/").lower()
+                for res_path, result in results_map.items():
+                    norm_res_path = res_path.rstrip("\\/").lower()
+                    if node_dir == norm_res_path or node_dir.endswith(norm_res_path):
+                        item.update_ai_result(result)
+                        updated_any = True
+                        break
+
+        # 如果有任何更新，可能影响到统计（如风险等级改变导致"一键清理"逻辑变化）
         if updated_any:
             # 这里不调用 _load_data (太重)，只更新统计数值
             self._update_btn_and_total_label()
