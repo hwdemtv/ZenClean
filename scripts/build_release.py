@@ -64,7 +64,13 @@ def run_pyinstaller():
                 # 过滤掉一些无关痛痒的常规 INFO，让界面清爽紧凑些
                 line = output.strip()
                 if "INFO:" not in line or "Building" in line or "Completed" in line:
-                    print(f"    [PyInstaller] {line}")
+                    try:
+                        # 尝试直接打印，如果控制台不支持则回退
+                        print(f"    [PyInstaller] {line}")
+                    except UnicodeEncodeError:
+                        # 强制回退到可打印字符
+                        safe_line = line.encode(sys.stdout.encoding, errors='replace').decode(sys.stdout.encoding)
+                        print(f"    [PyInstaller] {safe_line}")
         
         rc = process.poll()
         if rc == 0:
@@ -75,7 +81,11 @@ def run_pyinstaller():
             return False
             
     except Exception as e:
-        print(f"启动 PyInstaller 进程失败: {e}")
+        # 对异常信息也进行安全编码处理
+        try:
+            print(f"启动 PyInstaller 进程失败: {e}")
+        except UnicodeEncodeError:
+            print(f"启动 PyInstaller 进程失败: (编码错误，无法显示详情)")
         return False
 
 def verify_output():
