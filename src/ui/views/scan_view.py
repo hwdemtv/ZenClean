@@ -349,25 +349,25 @@ class ScanView(ft.Column):
         )
 
         # 5. OpenClaw 核心圆形磁贴 (C 位) — 全面优化版
-        self._tile_openclaw = ft.Container(
-            content=ft.Column([
-                ft.Text("🦞", size=36),
-                ft.Text("OpenClaw", size=12, weight=ft.FontWeight.W_800, color=ft.colors.ORANGE_ACCENT_700),
-                ft.Text("专项清理", size=9, color=COLOR_ZEN_TEXT_DIM)
-            ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=1),
-            width=110, height=110,
-            shape=ft.BoxShape.CIRCLE,
-            bgcolor="surfaceVariant",
-            border=ft.border.all(2.5, ft.colors.with_opacity(0.6, ft.colors.ORANGE_ACCENT_700)),
-            shadow=ft.BoxShadow(blur_radius=20, spread_radius=2, color=ft.colors.with_opacity(0.25, ft.colors.ORANGE_ACCENT_700)),
-            ink=True,
-            clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
-            on_click=self._on_click_openclaw_tile,
-            on_hover=self._on_hover_tile,
-            tooltip="OpenClaw 专项说明：\n精准清理 OpenClaw 产生的大量日志、临时缓存与崩溃转储文件。\n该功能处于核心 C 位，代表对特定工具的专业级垃圾收割能力。",
-            animate_scale=300,
-            scale=0.0,  # 入场动画初始态：从零缩放
-        )
+        # self._tile_openclaw = ft.Container(
+        #     content=ft.Column([
+        #         ft.Text("🦞", size=36),
+        #         ft.Text("OpenClaw", size=12, weight=ft.FontWeight.W_800, color=ft.colors.ORANGE_ACCENT_700),
+        #         ft.Text("专项清理", size=9, color=COLOR_ZEN_TEXT_DIM)
+        #     ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=1),
+        #     width=110, height=110,
+        #     shape=ft.BoxShape.CIRCLE,
+        #     bgcolor="surfaceVariant",
+        #     border=ft.border.all(2.5, ft.colors.with_opacity(0.6, ft.colors.ORANGE_ACCENT_700)),
+        #     shadow=ft.BoxShadow(blur_radius=20, spread_radius=2, color=ft.colors.with_opacity(0.25, ft.colors.ORANGE_ACCENT_700)),
+        #     ink=True,
+        #     clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+        #     on_click=self._on_click_openclaw_tile,
+        #     on_hover=self._on_hover_tile,
+        #     tooltip="OpenClaw 专项说明：\\n精准清理 OpenClaw 产生的大量日志、临时缓存与崩溃转储文件。\\n该功能处于核心 C 位，代表对特定工具的专业级垃圾收割能力。",
+        #     animate_scale=300,
+        #     scale=0.0,  # 入场动画初始态：从零缩放
+        # )
 
         _grid_base = ft.Column([
             ft.Row([self._tile_hibernation, self._tile_virtual_mem], spacing=25),
@@ -377,10 +377,10 @@ class ScanView(ft.Column):
         # 核心叠层布局：2x2 方阵 + 中心圆形
         _advanced_grid_stack = ft.Stack([
             _grid_base,
-            ft.Container(
-                content=self._tile_openclaw,
-                alignment=ft.alignment.center,
-            )
+            # ft.Container(
+            #     content=self._tile_openclaw,
+            #     alignment=ft.alignment.center,
+            # )
         ], alignment=ft.alignment.center)
 
         # 组合极客大屏布局 (彻底断舍离中间层组件)
@@ -656,13 +656,13 @@ class ScanView(ft.Column):
             self.app.page.run_task(_animate)
         
         # ── 1.5 OpenClaw 核心磁贴入场弹出动画 ──
-        async def _openclaw_entrance():
-            import asyncio
-            await asyncio.sleep(0.3)  # 稍微延迟，让甜甜圈先出场
-            if self.page and hasattr(self, '_tile_openclaw'):
-                self._tile_openclaw.scale = 1.0
-                self._safe_update(self._tile_openclaw)
-        self.app.page.run_task(_openclaw_entrance)
+        # async def _openclaw_entrance():
+        #     import asyncio
+        #     await asyncio.sleep(0.3)  # 稍微延迟，让甜甜圈先出场
+        #     if self.page and hasattr(self, '_tile_openclaw'):
+        #         self._tile_openclaw.scale = 1.0
+        #         self._safe_update(self._tile_openclaw)
+        # self.app.page.run_task(_openclaw_entrance)
         
         # 已激活用户异步获取 AI 额度
         if getattr(self.app, "is_activated", False):
@@ -1067,30 +1067,30 @@ class ScanView(ft.Column):
         self._upd_dlg.open = True
         self.app.page.update()
 
-    def _on_click_openclaw_tile(self, e):
-        """OpenClaw 专项清理点击事件"""
-        # 实现老板要求的“大龙虾”专项逻辑
-        from core.logger import logger
-        
-        # 1. 在本地 scan_nodes 中筛选 OpenClaw 相关的项
-        openclaw_nodes = [node for node in self.app.scan_nodes if "OpenClaw" in (node.get('path') or "")]
-        
-        if not openclaw_nodes:
-            self.app.page.snack_bar = ft.SnackBar(
-                ft.Text("未发现 OpenClaw 垃圾残留，您的系统非常清爽！"),
-                bgcolor=ft.colors.GREEN_700
-            )
-        else:
-            total_size = sum(node.get('size_bytes', 0) for node in openclaw_nodes) # Changed 'size' to 'size_bytes'
-            size_str = self.app.format_size(total_size)
-            self.app.page.snack_bar = ft.SnackBar(
-                ft.Text(f"已捕获 {len(openclaw_nodes)} 项 OpenClaw 残留 ({size_str})，正在执行深度粉碎..."),
-                bgcolor=ft.colors.ORANGE_ACCENT_700
-            )
-            logger.info(f"[OpenClaw] 专项清理触发: 涉及数据量 {size_str}")
-
-        self.app.page.snack_bar.open = True
-        self.app.page.update()
+    # def _on_click_openclaw_tile(self, e):
+    #     """OpenClaw 专项清理点击事件"""
+    #     # 实现老板要求的“大龙虾”专项逻辑
+    #     from core.logger import logger
+    #     
+    #     # 1. 在本地 scan_nodes 中筛选 OpenClaw 相关的项
+    #     openclaw_nodes = [node for node in self.app.scan_nodes if "OpenClaw" in (node.get('path') or "")]
+    #     
+    #     if not openclaw_nodes:
+    #         self.app.page.snack_bar = ft.SnackBar(
+    #             ft.Text("未发现 OpenClaw 垃圾残留，您的系统非常清爽！"),
+    #             bgcolor=ft.colors.GREEN_700
+    #         )
+    #     else:
+    #         total_size = sum(node.get('size_bytes', 0) for node in openclaw_nodes) # Changed 'size' to 'size_bytes'
+    #         size_str = self.app.format_size(total_size)
+    #         self.app.page.snack_bar = ft.SnackBar(
+    #             ft.Text(f"已捕获 {len(openclaw_nodes)} 项 OpenClaw 残留 ({size_str})，正在执行深度粉碎..."),
+    #             bgcolor=ft.colors.ORANGE_ACCENT_700
+    #         )
+    #         logger.info(f"[OpenClaw] 专项清理触发: 涉及数据量 {size_str}")
+    # 
+    #     self.app.page.snack_bar.open = True
+    #     self.app.page.update()
 
     # ── 高阶功能：虚拟内存管理框架 ──────────────────────────────────────────────
     def _on_click_virtual_mem_tile(self, e):
