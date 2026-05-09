@@ -1,10 +1,12 @@
-"""
-ZenClean 全局配置
-所有模块从此处读取常量，不允许在业务代码中硬编码配置值。
-"""
+"""ZenClean 配置文件"""
 import os
 import sys
+import json
 from pathlib import Path
+try:
+    from utils.config_crypto import decrypt_config
+except ImportError:
+    decrypt_config = None
 
 try:
     from dotenv import load_dotenv
@@ -20,14 +22,31 @@ try:
         return Path(__file__).parent.parent.parent
 
     _root = _get_project_root()
-    # 优先从 exe 同级目录加载 .env（用户手动放置），其次从项目根加载（开发环境）
+    
+    # --- 增强配置加载链 (SaaS 生产环境适配) ---
     _exe_dir = Path(sys.executable).parent if getattr(sys, "frozen", False) else None
+    
+    # 1. 优先尝试加载加密的二进制配置 settings.dat (防止用户误改或泄露)
+    _dat_path = (_exe_dir / "settings.dat") if _exe_dir else (_root / "settings.dat")
+    if _dat_path.exists() and decrypt_config:
+        try:
+            with open(_dat_path, "rb") as f:
+                raw_content = decrypt_config(f.read())
+                if raw_content:
+                    # 将解密后的 kv 对注入环境变量，让 dotenv/os.environ 透明感知
+                    for line in raw_content.splitlines():
+                        if "=" in line and not line.startswith("#"):
+                            k, v = line.split("=", 1)
+                            os.environ[k.strip()] = v.strip()
+        except Exception:
+            pass
+    
+    # 2. 其次加载 .env (开发环境或高级用户手动覆盖)
     if _exe_dir and (_exe_dir / ".env").exists():
         load_dotenv(dotenv_path=_exe_dir / ".env")
     else:
         load_dotenv(dotenv_path=_root / ".env")
 except ImportError:
-    # 未安装 python-dotenv 时，静默跳过环境变量文件加载
     pass
 
 def _get_downloads_folder() -> str:

@@ -21,6 +21,8 @@ a = Analysis(
         'pydantic',
         'send2trash',
         'machineid',
+        'packaging',
+        'utils.config_crypto',
     ],
     hookspath=[],
     hooksconfig={},
@@ -60,7 +62,7 @@ exe_dir = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False, # 防止杀毒软件把 UPX 报毒
-    console=False, # 关闭控制台窗口，实现真正的纯 GUI
+    console=False, # 生产环境禁用控制台窗口
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

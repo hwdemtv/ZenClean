@@ -1,6 +1,7 @@
 import os
 import sys
 import flet as ft
+print("[DEBUG] main.py imports starting...")
 from config.settings import (
     COLOR_ZEN_BG, COLOR_ZEN_PRIMARY, WINDOW_WIDTH, WINDOW_HEIGHT
 )
@@ -12,6 +13,7 @@ if getattr(sys, 'frozen', False):
     _ROOT = getattr(sys, '_MEIPASS', os.path.abspath(os.path.dirname(sys.executable)))
 else:
     _ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+print(f"[DEBUG] _ROOT: {_ROOT}")
 
 _ASSETS_DIR = os.path.join(_ROOT, "assets")
 _ICON_PATH = os.path.join(_ASSETS_DIR, "icon.ico")
@@ -31,7 +33,9 @@ def main(page: ft.Page):
     try:
         import pyi_splash
         pyi_splash.close()
-    except Exception:
+        print("[DEBUG] Splash closed (main function)")
+    except Exception as e:
+        print(f"[DEBUG] Splash close failed in main: {e}")
         pass
 
     # ── 1. 原生 Flet 亮/暗动态双主题装配 ──────────────────────────────────────
@@ -269,9 +273,12 @@ if __name__ == "__main__":
     try:
         import pyi_splash
         pyi_splash.close()
-    except Exception:
+        print("[DEBUG] Splash closed (main loop entry)")
+    except Exception as e:
+        print(f"[DEBUG] Splash close failed in main loop: {e}")
         pass
 
+    print("[DEBUG] Entering VC++ check...")
     # ── VC++ 运行库检测逻辑 ───────────────────────────────────────────────
     def check_vcpp_redist():
         try:
@@ -304,5 +311,6 @@ if __name__ == "__main__":
     atexit.register(cleanup_on_exit)
 
     # 正式拉起应用
+    print("[DEBUG] Launching ft.app...")
     ft.app(target=main, assets_dir=_ASSETS_DIR)
 

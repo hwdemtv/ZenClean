@@ -89,7 +89,15 @@ def check_for_updates(on_result, manual=False):
                         latest_version = latest_release.get("tag_name", "").lstrip("v")
                         current_clean = APP_VERSION.lstrip("v")
                         
-                        if latest_version and latest_version != current_clean:
+                        # 使用更加严谨的版本比较逻辑：remote > local
+                        from packaging import version
+                        try:
+                            is_new = version.parse(latest_version) > version.parse(current_clean)
+                        except Exception:
+                            # 降级：如果无法解析版本号（如格式不规范），则退回到字符串不相等判断
+                            is_new = latest_version != current_clean
+                        
+                        if latest_version and is_new:
                             html_url = FALLBACK_DOWNLOAD_URL
                             body = latest_release.get("body", "发现了新的版本，建议您立刻更新。")
                             on_result(True, latest_version, html_url, body)

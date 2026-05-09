@@ -6,3 +6,4 @@ requests
 PyJWT
 py-machineid
 python-dotenv
+packaging

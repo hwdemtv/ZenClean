@@ -91,13 +91,38 @@ def run_pyinstaller():
 def verify_output():
     """审计最终产物"""
     print("[3/3] 审计与环境校验...")
-    target_exe = RELEASE_DIR / "ZenClean" / "ZenClean.exe"
+    release_app_dir = RELEASE_DIR / "ZenClean"
+    target_exe = release_app_dir / "ZenClean.exe"
     
+    # 将 .env 转换为加密的 settings.dat 拷贝到 dist 目录
+    # 这样既能保护后端地址不被记事本直视，又能保持外置配置的灵活性
+    env_src = PROJECT_ROOT / ".env"
+    dat_dst = release_app_dir / "settings.dat"
+    
+    if env_src.exists():
+        try:
+            # 动态导入项目内的加密工具
+            sys.path.append(str(PROJECT_ROOT / "src"))
+            from utils.config_crypto import encrypt_config
+            
+            with open(env_src, "r", encoding="utf-8") as f:
+                content = f.read()
+            
+            encrypted_bytes = encrypt_config(content)
+            with open(dat_dst, "wb") as f:
+                f.write(encrypted_bytes)
+                
+            print(f"  - 配置加固：已生成加密配置 settings.dat (替代 .env)")
+        except Exception as e:
+            print(f"  ! 警告：生成 settings.dat 失败: {e}")
+    else:
+        print("  ! 提示：未在根目录找到 .env 文件，跳过配置加密步骤。")
+
     if target_exe.exists():
         size_mb = target_exe.stat().st_size / (1024 * 1024)
         print(f"  - 校验通过：找到核心执行体 {target_exe.name} (大小: {size_mb:.2f} MB)")
         print(f"  - 产物路径: {target_exe.parent}")
-        print("\n成功！全量编译打包完成。请将整个 [ZenClean] 目录发给无 Python 环境的测试机进行双击校验。")
+        print("\n成功！全量编译打包完成。请将整个 [ZenClean] 目录发给无 Python 环境 de 测试机进行双击校验。")
     else:
         print("  警告：未找到目标构建产物 ZenClean.exe，打包可能并未真正成功。")
 

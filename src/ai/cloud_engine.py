@@ -372,7 +372,9 @@ def get_quota() -> dict | None:
             "Authorization": f"Bearer {token}",
             "X-Request-Timestamp": timestamp,
             "X-Request-Nonce": nonce,
-            "X-Request-Signature": signature
+            "X-Request-Signature": signature,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json",
         }
         res = requests.get(
             AI_QUOTA_URL,
