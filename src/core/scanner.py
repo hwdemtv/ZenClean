@@ -15,7 +15,7 @@ ZenClean 后台扫描引擎 (线程版)
 import os
 import time
 import threading
-from typing import Callable, Any
+from typing import Callable
 from pathlib import Path
 
 from config.settings import SCAN_BATCH_SIZE, SCAN_TARGETS

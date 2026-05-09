@@ -20,7 +20,12 @@ try:
         return Path(__file__).parent.parent.parent
 
     _root = _get_project_root()
-    load_dotenv(dotenv_path=_root / ".env")
+    # 优先从 exe 同级目录加载 .env（用户手动放置），其次从项目根加载（开发环境）
+    _exe_dir = Path(sys.executable).parent if getattr(sys, "frozen", False) else None
+    if _exe_dir and (_exe_dir / ".env").exists():
+        load_dotenv(dotenv_path=_exe_dir / ".env")
+    else:
+        load_dotenv(dotenv_path=_root / ".env")
 except ImportError:
     # 未安装 python-dotenv 时，静默跳过环境变量文件加载
     pass
@@ -393,8 +398,8 @@ WINDOW_HEIGHT = 680
 
 # ── 版本更新检查 ───────────────────────────────────────────────────────────────
 # 留空则跳过更新检查（CI/离线环境使用）
-# 国内可使用镜像加速获取 API: https://api.kkgithub.com/repos/hwdemtv/ZenClean/releases/latest
-UPDATE_CHECK_URL = "https://api.kkgithub.com/repos/hwdemtv/ZenClean/releases/latest"
+# 国内可使用镜像加速获取 API: https://api.gitmirror.com/repos/hwdemtv/ZenClean/releases/latest
+UPDATE_CHECK_URL = "https://api.gitmirror.com/repos/hwdemtv/ZenClean/releases/latest"
 
 # 默认官方国内下载源（避开 GitHub Releases 的强壁垒）
 FALLBACK_DOWNLOAD_URL = "https://pan.quark.cn/s/38bdcc92a943"

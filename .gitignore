@@ -47,3 +47,38 @@ tests/.pytest_cache/
 # Local configuration overrides
 .env
 .env.local
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example
+wrangler.jsonc
+
+# Build artifacts
+dist_old/
+.pyarmor_dist/
+*.c
+*.pyd
+
+# Cache files (contain user-specific paths)
+zenclean_space_cache.json
+ai_cache.json
+
+# IDE / Claude Code local config
+.claude/
+
+# Backup files
+*.bak
+
+# Debug data
+db_check*.txt
+
+# Test data
+test_src_chaos/
+
+# Documentation planning artifacts
+contexts/
+*_优化方案.md
+*_深度分析报告.md
+*_排查指南.md

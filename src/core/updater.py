@@ -1,3 +1,4 @@
+import os
 import threading
 import requests
 import json
@@ -51,18 +52,32 @@ def check_for_updates(on_result, manual=False):
 
             # 降级：如果商业网关未配置或失败，尝试多重镜像轮询 (GitHub Releases)
             # 方案优化：改用 /releases 列表接口，以支持获取最新的 Pre-release 版本 (Beta 版常用)
+            _REPO = "hwdemtv/ZenClean"
+            _SELF_HOSTED_PROXY = os.environ.get(
+                "GITHUB_PROXY_URL", "https://git.hubinwei.top"
+            )
             MIRRORS = [
-                "https://api.kkgithub.com/repos/hwdemtv/ZenClean/releases",
-                "https://gh-api.99988866.xyz/repos/hwdemtv/ZenClean/releases",
-                "https://ghapi.paniy.xyz/repos/hwdemtv/ZenClean/releases",
-                "https://api.github.com/repos/hwdemtv/ZenClean/releases" 
+                f"{_SELF_HOSTED_PROXY}/repos/{_REPO}/releases",
+                f"https://api.gitmirror.com/repos/{_REPO}/releases",
+                f"https://gh.ddlc.top/https://api.github.com/repos/{_REPO}/releases",
+                f"https://ghproxy.net/https://api.github.com/repos/{_REPO}/releases",
+                f"https://api.github.com/repos/{_REPO}/releases",
             ]
-            
+
+            import urllib3
+
             headers = {'User-Agent': f'ZenClean-Client/{APP_VERSION}'}
             for mirror_url in MIRRORS:
                 try:
                     logger.info(f"[Updater] 尝试镜像源 #{MIRRORS.index(mirror_url)+1}...")
-                    res = requests.get(mirror_url, timeout=6, headers=headers)
+                    # 首次尝试开启验证
+                    try:
+                        res = requests.get(mirror_url, timeout=6, headers=headers, verify=True)
+                    except requests.exceptions.SSLError:
+                        # 如果出现 SSL 错误（常见于部分镜像站证书配置问题），则尝试禁用验证
+                        logger.warning(f"[Updater] 镜像源 SSL 验证失败，尝试免验重试（仅用于版本检查，不涉及二进制下载）...")
+                        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                        res = requests.get(mirror_url, timeout=6, headers=headers, verify=False)
                     
                     if res.status_code == 200:
                         data = res.json()
@@ -88,7 +103,18 @@ def check_for_updates(on_result, manual=False):
                     else:
                         logger.warning(f"[Updater] 镜像源返回异常状态: {res.status_code}")
                 except Exception as e:
-                    logger.warning(f"[Updater] 镜像源访问失败: {type(e).__name__}")
+                    # 尝试从复杂的 SSLError/ConnectionError 对象中提取深层次简明原因
+                    err_msg = type(e).__name__
+                    try:
+                        # e.args[0].reason 可能是 urllib3 内嵌的 SSL 错误
+                        if hasattr(e, 'args') and len(e.args) > 0:
+                            reason = getattr(e.args[0], 'reason', e)
+                            if reason:
+                                err_msg = f"{type(e).__name__} ({type(reason).__name__})"
+                    except Exception:
+                        pass
+                    
+                    logger.warning(f"[Updater] 镜像源最终访问失败: {err_msg}")
                     continue
 
             # 如果走到这里还没 return，说明要么没配置地址，要么全部失败

@@ -11,8 +11,8 @@ class FileListItem(ft.Container):
         self.node = node
         self.on_check_change = on_check_change
         self.size_str = size_str
-        
-        # 定义内部需要动态刷新的控件
+        self.height = 48
+        self.alignment = ft.alignment.center
         self._risk_icon = ft.Icon(name=ft.icons.CIRCLE, size=10)
         self._path_text = ft.Text(
             self._truncate_path(node["path"]),
@@ -24,25 +24,32 @@ class FileListItem(ft.Container):
         # 初始化显示
         self._apply_node_data(node)
         
+        # ── 布局增强 ──
+        # 将复选框与路径列对齐，确保即使高度受限也可见
+        line_path = ft.Row([
+            self._risk_icon,
+            self._path_text,
+        ], spacing=5, expand=True)
+
         self.content = ft.Row([
             ft.Checkbox(
                 value=node.get("is_checked", False), 
-                on_change=lambda e: self.on_check_change(e, self.node)
+                on_change=lambda e: self.on_check_change(e, self.node),
+                scale=0.8
             ),
-            self._risk_icon,
             ft.Column([
-                self._path_text,
+                line_path,
                 self._status_text
             ], spacing=0, expand=True, alignment=ft.MainAxisAlignment.CENTER),
-            self._size_text,
+            ft.Text(size_str, size=11, color=ft.colors.GREY_500, font_family="Consolas"),
             ft.IconButton(
                 icon=ft.icons.FOLDER_OPEN_ROUNDED,
                 icon_size=16,
                 icon_color=COLOR_ZEN_PRIMARY,
-                tooltip="打开文件所在目录 (手动清理)",
+                tooltip="打开所在目录",
                 on_click=self._open_location
             ),
-        ], spacing=5)
+        ], vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=5)
         
         self.padding = ft.padding.only(left=10, right=5, top=2, bottom=2)
         self.tooltip = node.get("ai_advice", "")

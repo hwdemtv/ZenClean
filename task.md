@@ -16,7 +16,10 @@
     - [x] 实现一键恢复逻辑与系统用户文件夹（桌面/下载/文档等）无损搬家
     - [x] 隔离沙箱引擎 (quarantine.py) + 沙箱管理界面 (quarantine_view.py)
     - [x] 休眠文件管理 (system_optimizer.py) — powercfg -h off/on
-    - [x] 修复 WinError 5 系统保护目录搬运崩溃
+    - [x] 更新 `src/config/settings.py`：调整 AI 超时参数 <!-- id: 0 -->
+- [x] 增强 `src/ai/cloud_engine.py`：实现 AI 请求重试逻辑 <!-- id: 1 -->
+- [x] 稳健化 `src/ui/views/scan_view.py`：修复 `AssertionError` 与存储超时问题 <!-- id: 2 -->
+- [x] 验证修复：通过模拟高负载和弱网环境确认稳定性提升 <!-- id: 3 -->
 - [x] AI 智能分析与隐私模块
     - [x] 本地规则引擎与脱敏 (local_engine.py)
     - [x] 本地 JSON 知识库大脑配置 (file_kb.json)

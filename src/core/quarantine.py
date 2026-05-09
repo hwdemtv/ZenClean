@@ -5,11 +5,9 @@ ZenClean 隔离沙箱引擎 (Quarantine Sandbox)
 提供 72 小时的反悔期。防范彻底误删导致的客诉。
 """
 import os
-import sys
 import uuid
 import json
 import shutil
-import time
 from datetime import datetime, timedelta
 from pathlib import Path
 

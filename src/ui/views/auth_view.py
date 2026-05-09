@@ -27,11 +27,6 @@ class AuthView(ft.Column):
             value=False,
             fill_color=COLOR_ZEN_PRIMARY,
         )
-        
-        self._agree_checkbox = ft.Checkbox(
-            value=False,
-            fill_color=COLOR_ZEN_PRIMARY,
-        )
 
         def _toggle_checkbox(e):
             self._agree_checkbox.value = not self._agree_checkbox.value
@@ -426,7 +421,7 @@ class AuthView(ft.Column):
             self.page.snack_bar = ft.SnackBar(ft.Text("已复制到剪贴板"))
             self.page.snack_bar.open = True
             self.page.update()
-        except:
+        except Exception:
             self.page.snack_bar = ft.SnackBar(ft.Text("复制失败，请手动复制"))
             self.page.snack_bar.open = True
             self.page.update()

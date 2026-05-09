@@ -50,11 +50,15 @@ def _load_cache_from_disk():
         except Exception as e:
             logger.error(f"Failed to load AI cache from {AI_CACHE_FILE}: {e}")
 
+_cache_dirty = False  # 标记是否有未写盘的缓存变更
+
 def _save_cache_to_disk():
     """将运行期间收集的新 AI 判决增量保存到本地硬盘（线程安全）"""
+    global _cache_dirty
     # 使用信号量防止并发写盘导致的数据竞争
     if not _cache_write_lock.acquire(blocking=False):
-        # 如果已有写盘线程在运行，跳过本次写操作
+        # 如果已有写盘线程在运行，标记为脏，当前写完后会补写
+        _cache_dirty = True
         return
 
     try:
@@ -62,6 +66,7 @@ def _save_cache_to_disk():
         with _cache_lock:
             # 安全拷贝一份当前数据进行写盘，避免一直占据锁
             data_to_save = _dir_cache.copy()
+            _cache_dirty = False
 
         with open(AI_CACHE_FILE, "w", encoding="utf-8") as f:
             json.dump(data_to_save, f, ensure_ascii=False, indent=2)
@@ -69,6 +74,9 @@ def _save_cache_to_disk():
         logger.error(f"Failed to save AI cache to disk: {e}")
     finally:
         _cache_write_lock.release()
+        # 写盘完成后，如果有新的脏数据，立即补写一次
+        if _cache_dirty:
+            _save_cache_to_disk()
 
 # 初始化时自动加载持久化缓存
 _load_cache_from_disk()
@@ -165,7 +173,10 @@ def _build_fallback_results(paths: list[str], advice: str) -> list[dict]:
     with _cache_lock:
         for path in paths:
             res = {**fallback_base, "path": path}
-            _dir_cache[path] = res
+            # 按父目录缓存，与 query() 的 dir_path 查询键一致
+            dir_path = _get_parent_dir(path)
+            if dir_path:
+                _dir_cache[dir_path] = res
             results.append(res)
     return results
 
@@ -289,12 +300,14 @@ def _batch_analyze(paths: list[str]) -> list[dict]:
                 # 归一化路径匹配：确保 AI 返回的 path 与提交的 path 一致
                 batch_results = _normalize_batch_paths(batch_results, paths)
 
-                # 将分析结果存入持久化缓存
+                # 将分析结果存入持久化缓存（按父目录键存储，与 query() 查询一致）
                 with _cache_lock:
                     for res in batch_results:
                         path = res.get("path")
                         if path:
-                            _dir_cache[path] = res
+                            dir_key = _get_parent_dir(path)
+                            if dir_key:
+                                _dir_cache[dir_key] = res
                 _save_cache_to_disk()
                 return batch_results
 

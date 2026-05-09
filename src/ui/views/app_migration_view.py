@@ -364,7 +364,7 @@ class AppMigrationView(ft.Column):
                     total += entry.stat().st_size
                 elif entry.is_dir():
                     total += self._get_dir_size_recursive(entry.path)
-        except:
+        except Exception:
             pass
         return total
 
@@ -376,7 +376,7 @@ class AppMigrationView(ft.Column):
                     total += entry.stat().st_size
                 elif entry.is_dir():
                     total += self._get_dir_size_recursive(entry.path)
-        except:
+        except Exception:
             pass
         return total
 

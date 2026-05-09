@@ -24,9 +24,9 @@ from core.logger import logger
 # 安全密钥管理：从环境变量读取，避免硬编码
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# API 签名密钥 - 优先从环境变量读取，生产环境必须配置
+# API 签名密钥 - 从环境变量读取，未配置时签名功能将被禁用
 # 注意：密钥长度不应低于 32 位，否则会触发 InsecureKeyLengthWarning
-API_SIGNATURE_SECRET = os.environ.get("ZC_API_SECRET", "zenclean-high-entropy-signature-secret-v1-standard")
+API_SIGNATURE_SECRET = os.environ.get("ZC_API_SECRET", "")
 
 def _get_api_secret() -> str:
     """
@@ -137,6 +137,7 @@ def verify_license_online(license_key: str, is_auto_check: bool = False) -> tupl
     # 循环请求各节点
     last_error_msg = "网络连接失败，请检查网络"
     connection_errors = []
+    notification = None
     
     for url in LICENSE_SERVER_URLS:
         try:
@@ -216,7 +217,8 @@ def verify_license_online(license_key: str, is_auto_check: bool = False) -> tupl
         error_msg = "网络连接失败，请检查网络\n\n详细错误:\n"
         error_msg += "\n".join(f"- {e}" for e in connection_errors[:2])
         error_msg += "\n\n建议: 检查防火墙/杀毒软件是否拦截了 ZenClean 的网络请求，或联系管理员排查代理/网关策略"
-    return False, last_error_msg
+        last_error_msg = error_msg
+    return False, last_error_msg, notification
 
 
 def _save_local_token(token: str, backend_expires_at: Optional[str] = None, *, license_key: Optional[str] = None) -> None:
@@ -267,6 +269,8 @@ def check_local_auth_status(is_startup: bool = False) -> tuple[bool, Optional[di
         logger.info("Startup: Skipping NTP check to speed up launch.")
 
     # 2. 解析 JWT（目前服务端未同步 Secret，暂时关闭验签，仅校验 payload 内容）
+    # TODO: 服务端 Secret 同步后应启用签名验证以防止令牌伪造
+    logger.warning("JWT signature verification is DISABLED - tokens are not cryptographically verified")
     try:
         decoded = jwt.decode(token, options={"verify_signature": False})
         decoded["_backend_expires_at"] = backend_expires_at

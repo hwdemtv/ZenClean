@@ -12,7 +12,7 @@ a = Analysis(
     datas=[
         ('src/config/file_kb.json', 'config'),
         ('assets/*', 'assets'),
-        ('.env', '.'),  # 将根目录下的环境变量文件一起打包
+        # .env 不再打包，改为运行时从 exe 同级目录或系统环境变量读取
     ],
     hiddenimports=[
         'flet',

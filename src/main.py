@@ -93,7 +93,8 @@ def main(page: ft.Page):
         if e.data == "close":
             page.window.visible = False
             page.update()
-        
+
+    page.window.on_event = _on_window_event
     page.window.prevent_close = True
     # 将静态资源根目录存入 client_storage，方便跨视图稳健加载 icon/图片
     page.client_storage.set("assets_dir", _ASSETS_DIR)
@@ -112,6 +113,7 @@ def main(page: ft.Page):
     _IPC_ADDR = ('127.0.0.1', 19528)
     def _listen_ipc():
         from multiprocessing.connection import Listener
+        from core.logger import logger
         try:
             with Listener(_IPC_ADDR) as listener:
                 while True:
@@ -122,10 +124,10 @@ def main(page: ft.Page):
                                 path = msg.get('path')
                                 if path and hasattr(app, "trigger_auto_scan"):
                                     app.trigger_auto_scan(path)
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+                    except Exception as e:
+                        logger.debug(f"IPC connection error: {e}")
+        except Exception as e:
+            logger.warning(f"IPC listener failed to start: {e}")
 
     import threading
     ipc_thread = threading.Thread(target=_listen_ipc, daemon=True)
@@ -179,10 +181,12 @@ if __name__ == "__main__":
     # ── 拦截底权无头监控探测任务 (无需 UI 且无需 UAC) ─────────
     if _is_disk_watch:
         try:
-            from core.startup_monitor import run_check
-            run_check()
-        except Exception:
-            pass
+            from core.disk_watcher import check_disk, get_threshold
+            is_low, _, free_gb = check_disk()
+            threshold = get_threshold()
+            print(f"Disk check: {free_gb:.1f}GB free, threshold={threshold}GB, low={is_low}")
+        except Exception as e:
+            print(f"[ERROR] --disk-watch failed: {e}", file=sys.stderr)
         sys.exit(0)
 
     # ── 单实例锁：防止右键菜单等场景重复启动 ──────────────────────────────
@@ -258,7 +262,7 @@ if __name__ == "__main__":
                     sys.exit(0) # 用户选择不继续，安静退出
         except Exception as e:
             # 异常情况，同理降级运行
-            pass
+            print(f"[WARN] UAC escalation failed: {e}", file=sys.stderr)
 
     # ── 0. 瞬间关闭 PyInstaller 启动闪屏 ──────────────────────────────────────
     # 必须在确定当前进程（无论是刚拉起的高权，还是降级的低权）是主执行进程时才关闭 splash

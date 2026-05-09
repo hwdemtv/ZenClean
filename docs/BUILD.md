@@ -32,3 +32,4 @@ pyinstaller zenclean.spec --clean
 
 * **验证点 A (完整性)**：检查该文件夹内是否生成了主入口文件 `ZenClean.exe`，以及 `assets` 和 `config` 文件夹。
 * **验证点 B (权限系统)**：当不以管理员身份双击拉起时，是否有 Windows UAC 提权黄盾警报弹出。如若没有，请检查 `main.py` 的首行提权判断是否失效。
+* **验证点 C (.env 配置)**：`.env` 不再打包进可执行文件。如需自定义服务器地址，请将 `.env` 文件放置在 `ZenClean.exe` 同级目录。参考 `.env.example` 配置项。

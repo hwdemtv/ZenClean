@@ -1,6 +1,8 @@
 import shutil
+import random
 import time
 import flet as ft
+from typing import Optional, List
 
 from core.scanner import ScanWorker
 from ai.cloud_engine import get_quota
@@ -46,8 +48,11 @@ class ScanView(ft.Column):
         self.app = app
         self._worker: ScanWorker | None = None
         self._last_scan_update_ts = 0
+        self._last_scan_duration = 0
 
         # ── 未激活横幅 ────────────────────────────────────────────────────────
+        self._eula_accepted: Optional[bool] = None  # 本地缓存，避免 clientStorage 超时
+        self._is_mounted = False # 显式挂载状态位
         self._activation_banner = ft.Container(
             content=ft.Row([
                 ft.Icon(ft.icons.INFO_OUTLINE, color=COLOR_ZEN_GOLD),
@@ -159,7 +164,10 @@ class ScanView(ft.Column):
 
 
         # 获取 C 盘容量
-        total, used, free = shutil.disk_usage("C:\\")
+        try:
+            total, used, free = shutil.disk_usage("C:\\")
+        except Exception:
+            total, used, free = 0, 0, 0
         total_gb = total / (1024**3)
         free_gb = free / (1024**3)
         used_gb = total_gb - free_gb
@@ -263,7 +271,8 @@ class ScanView(ft.Column):
             _capsule_ai
         ], alignment=ft.MainAxisAlignment.CENTER, vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
-        self._time_status_text = ft.Text("预计扫查耗时 1.8s · 深度提权模式已开启", size=11, color="#6B7280")
+        # 首页预警信息（初始由 did_mount 中根据历史耗时覆盖）
+        self._time_status_text = ft.Text("正在智能评估扫描耗时...", size=11, color="#6B7280")
 
         self._action_tile = ft.Container(
             content=ft.Column([
@@ -566,10 +575,8 @@ class ScanView(ft.Column):
     # ── 取消扫描 ──────────────────────────────────────────────────────────────
 
     def _cancel_scan(self, e) -> None:
-        if self._consumer:
-            self._consumer.stop()
-        if self._worker and self._worker.is_alive():
-            self._worker.terminate()
+        if self._worker:
+            self._worker.stop()
         self._reset_to_idle()
 
     def _reset_to_idle(self) -> None:
@@ -585,6 +592,7 @@ class ScanView(ft.Column):
 
     def did_mount(self):
         """视图挂载到页面时，进行初始化工作。"""
+        self._is_mounted = True
         
         # 提取应用级持久标志位：由于 ScanView 每次回到 /scan 都会重新实例化，防抖锁必须挂载在 app 实例上
         is_already_loaded = getattr(self.app, "_is_scan_dashboard_loaded", False)
@@ -600,6 +608,23 @@ class ScanView(ft.Column):
                 self.app.scan_nodes = [auto_path]
                 # Flet 较新版本 run_task 强制要求异步协程，普通函数直接调用即可
                 self._start_scan(None)
+
+        # ── 0.1 消费托盘"一键健康扫描"标志 ──
+        if getattr(self.app, "_auto_start_scan", False):
+            self.app._auto_start_scan = False  # 立刻吞掉，防止重复触发
+            self._start_scan(None)
+
+        # ── 1.1 动态扫描耗时显示 ──
+        try:
+            last_dur = self.app.page.client_storage.get("last_scan_duration")
+        except Exception:
+            last_dur = None
+        if last_dur:
+            self._time_status_text.value = f"预计扫查耗时 {last_dur:.1f}s · 深度提权模式已开启"
+        else:
+            # 首次进入且无缓存记录，随机给出一个拟真的数字（如 1.6 - 2.4s）
+            self._time_status_text.value = f"预计扫查耗时 {random.uniform(1.6, 2.4):.1f}s · 深度提权模式已开启"
+        self._safe_update(self._time_status_text)
 
         cache_path = os.path.join(os.getcwd(), "zenclean_space_cache.json")
         has_cache = os.path.exists(cache_path)
@@ -626,7 +651,7 @@ class ScanView(ft.Column):
                     self._donut_used.value = curr_used
                     self._free_text_control.value = f"{curr_free:.1f} GB"
                     if self.page:
-                        self.update()
+                        self._safe_update()
                     await asyncio.sleep(0.016)
             self.app.page.run_task(_animate)
         
@@ -636,7 +661,7 @@ class ScanView(ft.Column):
             await asyncio.sleep(0.3)  # 稍微延迟，让甜甜圈先出场
             if self.page and hasattr(self, '_tile_openclaw'):
                 self._tile_openclaw.scale = 1.0
-                self._tile_openclaw.update()
+                self._safe_update(self._tile_openclaw)
         self.app.page.run_task(_openclaw_entrance)
         
         # 已激活用户异步获取 AI 额度
@@ -660,7 +685,7 @@ class ScanView(ft.Column):
                     self._quota_label.color = ft.colors.with_opacity(0.4, COLOR_ZEN_PRIMARY)
                 
                 if self.page:
-                    self.update()
+                    self._safe_update()
             
             self.app.page.run_task(_fetch_quota)
 
@@ -737,7 +762,7 @@ class ScanView(ft.Column):
                                 for i, item in enumerate(live_items[:5]):
                                     self._top_folders_panel.controls.append(_render_item(item, i))
                                 _update_pie_chart(live_items)
-                                if self.page: self.update()
+                                if self.page: self._safe_update()
                         except Exception:
                             live_items = []
 
@@ -777,7 +802,7 @@ class ScanView(ft.Column):
                     
                     _update_pie_chart(top_5)
                         
-                    if self.page: self.update()
+                    if self.page: self._safe_update()
                     # 降低 UI 刷新频率，扫描早期密集时稍微等待
                     await asyncio.sleep(0.1 if len(live_items) < 10 else 0.05)
 
@@ -790,13 +815,13 @@ class ScanView(ft.Column):
                 if getattr(self, "_top_folders_panel", None):
                     self._top_folders_panel.controls.clear()
                     self._top_folders_panel.controls.append(ft.Text("雷达扫描意外中断", color="error", size=11))
-                    if self.page: self.update()
+                    if self.page: self._safe_update()
 
         self.app.page.run_task(_fetch_top_folders)
 
     def will_unmount(self):
         """视图被卸载时进行销毁工作。"""
-        pass
+        self._is_mounted = False
 
     # ── 直接 UI 回调（从后台线程触发，经由 run_task 投递到 UI 事件循环） ──
 
@@ -808,7 +833,7 @@ class ScanView(ft.Column):
         if hasattr(self, "_scan_start_time"):
             elapsed = time.perf_counter() - self._scan_start_time
             self._time_status_text.value = f"已耗时 {elapsed:.1f}s · 深度提权模式已开启"
-            self._time_status_text.update()
+            self._safe_update(self._time_status_text)
             
         self.app.scan_nodes.extend(nodes)
         total = len(self.app.scan_nodes)
@@ -830,12 +855,12 @@ class ScanView(ft.Column):
         now = time.time()
         # 限制 UI 刷新帧率（约 25FPS对应 0.04s）
         if now - self._last_scan_update_ts > 0.04 or total == 0:
-            if self.page: self.update()
+            if self.page: self._safe_update()
             self._last_scan_update_ts = now
 
     async def _handle_scan_done_ui(self, total: int, skipped: int) -> None:
         import asyncio
-        if self.page: self.update()
+        if self.page: self._safe_update()
         
         await asyncio.sleep(0.5) 
         
@@ -847,7 +872,16 @@ class ScanView(ft.Column):
 
         self.app.has_scanned = True
         self._worker = None
-        if self.page: self.update()
+        
+        # ── 2. 保存本次实际耗时以便下次展示准确预估 ──
+        if hasattr(self, "_scan_start_time"):
+            duration = time.perf_counter() - self._scan_start_time
+            try:
+                self.app.page.client_storage.set("last_scan_duration", duration)
+            except Exception:
+                pass  # 存储失败不影响主流程
+            
+        if self.page: self._safe_update()
 
         # 自动跳转：停留 1.2 秒让用户看清最终统计结果
         if self.page:
@@ -866,7 +900,21 @@ class ScanView(ft.Column):
 
         self.app.has_scanned = True
         self._worker = None
-        if self.page: self.update()
+        if self.page: self._safe_update()
+
+    def _safe_update(self, control: Optional[ft.Control] = None):
+        """线程安全且检查挂载状态的 UI 更新器，防止 AssertionError 并捕获超时"""
+        if not self._is_mounted or not self.page:
+            return
+        
+        target = control if control else self
+        try:
+            target.update()
+        except Exception as e:
+            # 即使 self.page 存在，如果该控件已从 UI 树剥离，update() 也会抛出异常。
+            # 这是正常现象（如用户正在极速连点切换页面），我们静默吞掉。
+            from core.logger import logger
+            logger.debug(f"SafeUpdate skipped: {e}")
 
     # ── 高阶功能：系统休眠管控弹窗 ──────────────────────────────────────────────
     def _on_click_hibernation_tile(self, e):

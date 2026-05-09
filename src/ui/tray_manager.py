@@ -1,5 +1,7 @@
 import os
+import sys
 import threading
+import time
 import pystray
 from PIL import Image
 import flet as ft
@@ -38,22 +40,43 @@ class TrayManager:
         self.page.run_task(_action)
 
     def _quick_scan(self, icon=None, item=None):
-        """跳转并开始扫描"""
+        """跳转并自动开始扫描"""
         async def _action():
             self.page.window.visible = True
             self.page.window.minimized = False
             self.page.window.to_front()
+            # 设置自动扫描标志，让 ScanView 加载后自动开始扫描
+            self.app._auto_start_scan = True
             self.app.navigate_to("/scan")
             self.page.update()
         self.page.run_task(_action)
 
     def _exit_app(self, icon=None, item=None):
-        """彻底销毁并退出"""
-        logger.info("Exit requested from Tray.")
-        if self.icon:
-            self.icon.stop()
-        # 强制退出进程，否则一些后台线程（如 IPC 或守护线程）可能导致残留
-        os._exit(0)
+        """真正的销毁流程 (三保险模式)"""
+        logger.info("Universal exit triggered. Entering termination sequence...")
+
+        # [保险 1]：启动独立哨兵线程（daemon），3 秒后强制退出作为兜底
+        def _forced_sentinel():
+            time.sleep(3.0)  # 给正常退出流程足够时间
+            logger.info("Sentinel thread forcing exit (normal shutdown timed out)...")
+            os._exit(1)
+
+        sentinel = threading.Thread(target=_forced_sentinel, daemon=True)
+        sentinel.start()
+
+        # [保险 2]：先尝试隐藏窗口，然后通过 Flet 关闭
+        try:
+            self.page.window.visible = False
+            self.page.window.prevent_close = False
+            self.page.update()
+            self.page.window.close()
+        except Exception as e:
+            logger.warning(f"Graceful close failed: {e}")
+
+        # [保险 3]：正常退出（触发 atexit 清理子进程）
+        time.sleep(0.5)
+        logger.info("Exiting via sys.exit() to allow atexit cleanup...")
+        sys.exit(0)
 
     def run(self):
         """启动托盘线程"""

@@ -36,6 +36,7 @@ class ZenCleanApp(ft.Column):
         self.lease_expiry_date: Optional[str] = None
         self.total_expiry_date: Optional[str] = None
         self._eula_accepted: Optional[bool] = None  # 本地缓存，避免 clientStorage 超时
+        self._auto_start_scan: bool = False  # 托盘快捷扫描标志，由 TrayManager 设置
 
         _assets_dir = page.client_storage.get("assets_dir") or ""
         _icon_img_path = os.path.join(_assets_dir, "icon.png") if _assets_dir else "icon.png"
@@ -53,8 +54,7 @@ class ZenCleanApp(ft.Column):
                 ft.Container(
                     content=ft.Text("互为螺旋 - C盘AI极速清理大师", size=13, color=COLOR_ZEN_GOLD, weight=ft.FontWeight.BOLD),
                     alignment=ft.alignment.center,
-                    left=0, right=0, top=0, bottom=0,
-                    padding=ft.padding.only(left=205),
+                    expand=True,
                 ),
             ], expand=True),
             padding=ft.padding.only(left=15, top=8, bottom=8, right=10),
@@ -188,11 +188,29 @@ class ZenCleanApp(ft.Column):
         
     def on_ai_batch_done(self, results_map: dict):
         """AI 批次分析完成后的全局回调。由 BatchProcessor 触发。"""
-        # 1. 首先确保 app.scan_nodes 中的原始数据已经更新 (其实 cloud_engine 已更新内存)
-        # 2. 找到当前正在显示的视图，如果是 ResultView，通知其刷新
+        # 1. 更新 scan_nodes 中 ANALYZING 状态的节点
+        for node in self.scan_nodes:
+            if node.get("risk_level") != "ANALYZING":
+                continue
+            # 优先使用 _ai_query_key 精确匹配，否则尝试路径归一化模糊匹配
+            query_key = node.get("_ai_query_key")
+            if query_key and query_key in results_map:
+                result = results_map[query_key]
+                node.update(result)
+                node.pop("_ai_query_key", None)
+            else:
+                # 降级匹配：遍历 results_map 做路径归一化比较
+                node_dir = os.path.dirname(node.get("path", "")).rstrip("\\/").lower()
+                for res_path, result in results_map.items():
+                    norm_res_path = res_path.rstrip("\\/").lower()
+                    if node_dir == norm_res_path or node_dir.endswith(norm_res_path):
+                        node.update(result)
+                        node.pop("_ai_query_key", None)
+                        break
+
+        # 2. 通知当前视图刷新
         current_view = self._page_container.content
         if hasattr(current_view, "on_ai_batch_done"):
-            # 在 UI 线程中执行
             self.page.run_task(current_view.on_ai_batch_done, results_map)
 
     def _start_silent_update_check(self):
@@ -275,7 +293,7 @@ class ZenCleanApp(ft.Column):
                                 logger.warning(f"[BG_VERIFY] license revoked! Executing downgrade.")
                                 if AUTH_DAT_PATH.exists():
                                     try: AUTH_DAT_PATH.unlink()
-                                    except: pass
+                                    except Exception: pass
                                 self.set_activated(False)
                                 alert_msg = msg.replace("[REVOKED]", "").strip() if "[REVOKED]" in msg else "您的授权已失效，当前已恢复为免费版。"
                                 self.page.snack_bar = ft.SnackBar(ft.Text(alert_msg), bgcolor=ft.colors.RED_800)
@@ -401,6 +419,18 @@ class ZenCleanApp(ft.Column):
         self._notification_column.controls.insert(0, notification_card)
         self._notification_column.update()
 
+    def show_snack_bar(self, message: str, is_error: bool = False):
+        """在页面底部显示一条简短提示消息"""
+        if not self.page: return
+        snack = ft.SnackBar(
+            content=ft.Text(message, color="white"),
+            bgcolor=ft.colors.RED_700 if is_error else ft.colors.GREEN_700,
+            duration=3000,
+        )
+        self.page.overlay.append(snack)
+        snack.open = True
+        self.page.update()
+
     def _show_markdown_dialog(self, title: str, markdown_content: str):
         """展示 Markdown 渲染的详情对话框 (解决文字墙)"""
         def _close(e):
@@ -493,7 +523,6 @@ class ZenCleanApp(ft.Column):
 
     def trigger_auto_scan(self, path: str):
         """主实例通过 IPC 接收到扫描请求时的分发接口"""
-        import os
         if not path or not os.path.exists(path):
             return
         self.auto_scan_path = path

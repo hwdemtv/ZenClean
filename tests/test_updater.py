@@ -19,10 +19,10 @@ class TestUpdaterMirror(unittest.TestCase):
         
         resp_success = MagicMock()
         resp_success.status_code = 200
-        resp_success.json.return_value = {
+        resp_success.json.return_value = [{
             "tag_name": "v9.9.9",
             "body": "Mock Update Content"
-        }
+        }]
         
         # 定义 side_effect：先报错一次，再成功一次
         mock_get.side_effect = [Exception("Network Error"), resp_success]

@@ -5,7 +5,7 @@ ZenClean 本地 AI 规则引擎
 返回风险等级、分类、AI 建议与默认勾选状态。
 
 规则按 JSON 中的顺序依次匹配，第一个命中的规则即为最终结果。
-未命中任何规则时由 dispatch() 路由至 cloud_mock（第一阶段返回 UNKNOWN）。
+未命中任何规则时由 dispatch() 路由至 cloud_engine（返回 UNKNOWN 后异步分析）。
 
 公开 API（供 scanner.py 调用）：
     dispatch(path, size_bytes) -> NodeDict   # 统一调度入口
@@ -69,7 +69,12 @@ def _load_rules() -> list[tuple[re.Pattern, _Rule]]:
 
 
 # 模块级缓存：规则只加载一次
-_RULES: list[tuple[re.Pattern, _Rule]] = _load_rules()
+try:
+    _RULES: list[tuple[re.Pattern, _Rule]] = _load_rules()
+except Exception as _e:
+    import sys
+    print(f"[ERROR] Failed to load file_kb.json: {_e}", file=sys.stderr)
+    _RULES = []
 
 # CRISIS 默认回复（白名单命中时使用）
 _CRISIS_ADVICE = "系统核心文件，白名单守卫已拦截，禁止任何清理操作。"
@@ -106,7 +111,7 @@ def sanitize_path(path: str) -> str:
 def analyze(path: str, size_bytes: int = 0) -> NodeDict:
     """
     对单个路径执行本地规则匹配，返回 NodeDict。
-    UNKNOWN 路径不在此函数内处理，由 dispatch() 路由至 cloud_mock。
+    UNKNOWN 路径不在此函数内处理，由 dispatch() 路由至 cloud_engine。
 
     Args:
         path:       文件或目录的绝对路径字符串。
@@ -151,7 +156,7 @@ def analyze(path: str, size_bytes: int = 0) -> NodeDict:
         risk_level="UNKNOWN",
         category="unknown",
         is_checked=False,
-        ai_advice="",          # dispatch() 会用 cloud_mock 的结果覆盖此字段
+        ai_advice="",          # dispatch() 会用 cloud_engine 的结果覆盖此字段
         is_whitelisted=False,
         scan_ts=time.time(),
     )
@@ -165,12 +170,8 @@ def dispatch(path: str, size_bytes: int = 0) -> NodeDict:
 
     路由逻辑：
         1. 调用本地 analyze()。
-        2. 若结果为 UNKNOWN，将脱敏路径交给 cloud_mock（第一阶段）或
-           cloud_engine（第三阶段接入后替换）补充 ai_advice。
+        2. 若结果为 UNKNOWN，将脱敏路径交给 cloud_engine 补充 ai_advice。
         3. 返回最终 NodeDict。
-
-    第三阶段升级时，仅需将 cloud_mock 替换为真实 cloud_engine，
-    此函数签名与调用方代码无需改动。
     """
     node = analyze(path, size_bytes)
 
@@ -182,6 +183,9 @@ def dispatch(path: str, size_bytes: int = 0) -> NodeDict:
         node["ai_advice"] = cloud_result["ai_advice"]
         # 第二阶段及以后，采用云模型真实的危机研判
         node["risk_level"] = cloud_result.get("risk_level", "UNKNOWN")
+        # 传播 AI 查询键，便于后续异步回调时匹配节点
+        if "_ai_query_key" in cloud_result:
+            node["_ai_query_key"] = cloud_result["_ai_query_key"]
 
     return node
 

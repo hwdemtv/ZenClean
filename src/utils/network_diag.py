@@ -109,14 +109,14 @@ def run_full_diagnosis(server_urls: List[str]) -> str:
     try:
         import requests
         report_lines.append(f"requests库版本: {requests.__version__}")
-    except:
+    except Exception:
         report_lines.append("requests库: 未安装")
-    
+
     # 检查SSL
     try:
         import ssl
         report_lines.append(f"SSL版本: {ssl.OPENSSL_VERSION}")
-    except:
+    except Exception:
         report_lines.append("SSL: 不可用")
     
     return "\n".join(report_lines)

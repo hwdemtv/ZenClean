@@ -144,11 +144,11 @@ class PatchCacheAnalyzer:
                 if entry.is_file():
                     try:
                         total += entry.stat().st_size
-                    except:
+                    except Exception:
                         pass
                 elif entry.is_dir():
                     total += self._get_folder_size(entry.path)
-        except:
+        except Exception:
             pass
         return total
 
