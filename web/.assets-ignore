@@ -1,0 +1,5 @@
+# wrangler 静态资源部署排除清单(语法同 .gitignore)
+# 本地 AI 会话配置,严禁上线
+.claude
+# 宝塔/Nginx 服务器配置片段,不属于站点静态资源
+nginx-security-headers.conf

@@ -149,16 +149,16 @@ class TestJWTVerificationWarning(unittest.TestCase):
     def test_jwt_verify_infrastructure_exists(self):
         """v0.1.8 起 JWT 验签基础设施落地：配置 ZC_JWT_SECRET / ZC_JWT_PUBLIC_KEY 即启用"""
         import sys
+        import unittest.mock as mock
         if str(_SRC_DIR) not in sys.path:
             sys.path.insert(0, str(_SRC_DIR))
         from core import auth
-        # 未配置密钥时返回 (None, None) → 走历史降级路径
-        import unittest.mock as mock
-        with mock.patch.dict("os.environ", {}, clear=False):
-            import os
-            env = {k: v for k, v in os.environ.items() if k not in ("ZC_JWT_SECRET", "ZC_JWT_PUBLIC_KEY")}
-            with mock.patch.dict("os.environ", env, clear=True):
-                key, algos = auth._get_jwt_verify_key()
+        import os
+        # 未配置密钥且无约定位置公钥文件时返回 (None, None) → 走历史降级路径
+        env = {k: v for k, v in os.environ.items() if k not in ("ZC_JWT_SECRET", "ZC_JWT_PUBLIC_KEY")}
+        with mock.patch.dict("os.environ", env, clear=True), \
+             mock.patch.object(auth, "_jwt_pub_key_locations", return_value=[]):
+            key, algos = auth._get_jwt_verify_key()
         self.assertIsNone(key)
         self.assertIsNone(algos)
         # 配置对称密钥后启用 HS256 验签
@@ -168,6 +168,41 @@ class TestJWTVerificationWarning(unittest.TestCase):
         self.assertEqual(algos, ["HS256"])
         # 统一解码入口存在
         self.assertTrue(callable(auth._decode_jwt))
+
+    def test_jwt_pub_key_loaded_from_conventional_file(self):
+        """约定位置存在 jwt_pub.pem 时自动启用 RS256/ES256 验签（免环境变量配置）"""
+        import sys
+        import unittest.mock as mock
+        if str(_SRC_DIR) not in sys.path:
+            sys.path.insert(0, str(_SRC_DIR))
+        from core import auth
+        pem = (
+            "-----BEGIN PUBLIC KEY-----\n"
+            "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAunit-test\n"
+            "-----END PUBLIC KEY-----\n"
+        )
+        env = {k: v for k, v in os.environ.items() if k not in ("ZC_JWT_SECRET", "ZC_JWT_PUBLIC_KEY")}
+        with mock.patch.dict("os.environ", env, clear=True), \
+             mock.patch.object(auth, "_jwt_pub_key_locations", return_value=[self.tmp_pem]):
+            key, algos = auth._get_jwt_verify_key()
+        self.assertEqual(key, pem)
+        self.assertEqual(algos, ["RS256", "ES256"])
+
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        # 为 test_jwt_pub_key_loaded_from_conventional_file 准备临时 pem 文件
+        self._tmp_dir = tempfile.TemporaryDirectory()
+        self.tmp_pem = Path(self._tmp_dir.name) / "jwt_pub.pem"
+        self.tmp_pem.write_text(
+            "-----BEGIN PUBLIC KEY-----\n"
+            "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAunit-test\n"
+            "-----END PUBLIC KEY-----\n",
+            encoding="utf-8",
+        )
+
+    def tearDown(self):
+        self._tmp_dir.cleanup()
 
 
 # ═══════════════════════════════════════════════════════════════════════════

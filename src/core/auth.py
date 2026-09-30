@@ -4,6 +4,8 @@ import hmac
 import hashlib
 import uuid
 import os
+import sys
+from pathlib import Path
 from typing import Optional
 
 import jwt
@@ -11,6 +13,7 @@ import machineid
 import requests
 
 from config.settings import (
+    APP_DATA_DIR,
     AUTH_DAT_PATH,
     LICENSE_PRODUCT_ID,
     LICENSE_SERVER_URLS,
@@ -63,12 +66,25 @@ def _generate_api_signature(payload_str: str, timestamp: str, nonce: str) -> str
     return signature
 
 
+def _jwt_pub_key_locations() -> list:
+    """公钥约定文件位置的探测顺序（免配置即可启用验签）：
+    1. ZenClean.exe 同级的 jwt_pub.pem（绿色版/安装版，随包分发）
+    2. %APPDATA%\\ZenClean\\jwt_pub.pem（安装版热更新公钥用）
+    """
+    locs = []
+    if getattr(sys, "frozen", False):
+        locs.append(Path(sys.executable).parent / "jwt_pub.pem")
+    locs.append(APP_DATA_DIR / "jwt_pub.pem")
+    return locs
+
+
 def _get_jwt_verify_key() -> tuple[Optional[object], Optional[list[str]]]:
     """
     读取 JWT 验签密钥（服务端 Secret 同步后即自动启用验签）：
-      - ZC_JWT_SECRET:       对称密钥，使用 HS256
-      - ZC_JWT_PUBLIC_KEY:   RSA/EC 公钥（PEM 内容或文件路径），使用 RS256/ES256
-    均未配置时返回 (None, None)，调用方退化为"仅校验 payload"的历史行为。
+      - ZC_JWT_SECRET:       对称密钥，使用 HS256（注意：会随客户端分发，可被提取伪造，仅建议内测用）
+      - ZC_JWT_PUBLIC_KEY:   RSA/EC 公钥（PEM 文件路径），使用 RS256/ES256（推荐）
+      - 约定位置文件:        exe 同级或 %APPDATA%\\ZenClean\\ 下的 jwt_pub.pem（推荐分发方式）
+    均未命中时返回 (None, None)，调用方退化为"仅校验 payload"的历史行为。
     """
     secret = os.environ.get("ZC_JWT_SECRET", "").strip()
     if secret:
@@ -80,6 +96,13 @@ def _get_jwt_verify_key() -> tuple[Optional[object], Optional[list[str]]]:
         if os.path.isfile(pk):
             with open(pk, "r", encoding="utf-8") as f:
                 return f.read(), ["RS256", "ES256"]
+    # 约定位置文件探测（多行 PEM 无法安全写入 .env/settings.dat 的行级解析器，故走文件分发）
+    for cand in _jwt_pub_key_locations():
+        try:
+            if cand.is_file():
+                return cand.read_text(encoding="utf-8"), ["RS256", "ES256"]
+        except OSError:
+            continue
     return None, None
 
 
