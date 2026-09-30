@@ -63,6 +63,39 @@ def _generate_api_signature(payload_str: str, timestamp: str, nonce: str) -> str
     return signature
 
 
+def _get_jwt_verify_key() -> tuple[Optional[object], Optional[list[str]]]:
+    """
+    读取 JWT 验签密钥（服务端 Secret 同步后即自动启用验签）：
+      - ZC_JWT_SECRET:       对称密钥，使用 HS256
+      - ZC_JWT_PUBLIC_KEY:   RSA/EC 公钥（PEM 内容或文件路径），使用 RS256/ES256
+    均未配置时返回 (None, None)，调用方退化为"仅校验 payload"的历史行为。
+    """
+    secret = os.environ.get("ZC_JWT_SECRET", "").strip()
+    if secret:
+        return secret, ["HS256"]
+    pk = os.environ.get("ZC_JWT_PUBLIC_KEY", "").strip()
+    if pk:
+        if "-----BEGIN" in pk:
+            return pk, ["RS256", "ES256"]
+        if os.path.isfile(pk):
+            with open(pk, "r", encoding="utf-8") as f:
+                return f.read(), ["RS256", "ES256"]
+    return None, None
+
+
+def _decode_jwt(token: str) -> dict:
+    """
+    解析 JWT payload。
+    配置了验签密钥时执行真实验签（伪造/篡改令牌将抛出 PyJWTError，
+    由调用方按"授权无效"处理）；未配置时保持历史行为并输出告警。
+    """
+    key, algorithms = _get_jwt_verify_key()
+    if key is not None:
+        return jwt.decode(token, key=key, algorithms=algorithms)
+    logger.warning("JWT signature verification is DISABLED - set ZC_JWT_SECRET or ZC_JWT_PUBLIC_KEY to enable")
+    return jwt.decode(token, options={"verify_signature": False})
+
+
 def get_device_id() -> str:
     """获取设备唯一硬件标识（此处使用 py-machineid）"""
     try:
@@ -164,12 +197,9 @@ def verify_license_online(license_key: str, is_auto_check: bool = False) -> tupl
                             if is_auto_check:
                                 _, old_payload = check_local_auth_status()
                                 if old_payload:
-                                        # 解析 JWT 并强制验证签名（防篡改）
+                                        # 解析 JWT（配置验签密钥时强制验签，防篡改）
                                     try:
-                                        new_payload = jwt.decode(
-                                            token, 
-                                            options={"verify_signature": False}
-                                        )
+                                        new_payload = _decode_jwt(token)
                                         old_iat = old_payload.get('iat', 0)
                                         new_iat = new_payload.get('iat', 0)
                                         
@@ -268,11 +298,10 @@ def check_local_auth_status(is_startup: bool = False) -> tuple[bool, Optional[di
     else:
         logger.info("Startup: Skipping NTP check to speed up launch.")
 
-    # 2. 解析 JWT（目前服务端未同步 Secret，暂时关闭验签，仅校验 payload 内容）
-    # TODO: 服务端 Secret 同步后应启用签名验证以防止令牌伪造
-    logger.warning("JWT signature verification is DISABLED - tokens are not cryptographically verified")
+    # 2. 解析 JWT。配置了 ZC_JWT_SECRET / ZC_JWT_PUBLIC_KEY 时执行真实验签，
+    #    未配置时退化为仅校验 payload 内容（exp + device_id），并输出告警。
     try:
-        decoded = jwt.decode(token, options={"verify_signature": False})
+        decoded = _decode_jwt(token)
         decoded["_backend_expires_at"] = backend_expires_at
         decoded["_local_license_key"] = license_key
         

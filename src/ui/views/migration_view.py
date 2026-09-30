@@ -3,6 +3,7 @@ import flet as ft
 
 from core.migration import get_shell_folders, SHELL_FOLDER_KEYS, _dir_size, restore_folder
 from config.settings import COLOR_ZEN_PRIMARY, COLOR_ZEN_SURFACE
+from ui.utils import fmt_size as _fmt_size
 
 
 # 注册表键名 → 图标映射
@@ -14,17 +15,6 @@ _KEY_TO_ICON = {
     "My Video":                                   ft.icons.VIDEO_FILE,
     "My Music":                                   ft.icons.MUSIC_NOTE,
 }
-
-
-def _fmt_size(size_bytes: int) -> str:
-    """将字节数格式化为人类可读字符串。"""
-    if size_bytes >= 1024 ** 3:
-        return f"{size_bytes / 1024 ** 3:.1f} GB"
-    if size_bytes >= 1024 ** 2:
-        return f"{size_bytes / 1024 ** 2:.1f} MB"
-    if size_bytes >= 1024:
-        return f"{size_bytes / 1024:.1f} KB"
-    return f"{size_bytes} B"
 
 
 class MigrationView(ft.Column):
@@ -79,10 +69,28 @@ class MigrationView(ft.Column):
             self.app.page.overlay.remove(self._picker)
             self.app.page.update()
 
+    # ── 线程安全工具 ──────────────────────────────────────────────────────────
+
+    def _post_ui(self, coro_fn):
+        """将协程投递回 UI 线程执行。后台线程严禁直接操作 page/控件。"""
+        page = self.page
+        if page is not None:
+            page.run_task(coro_fn)
+
+    def _snack(self, message: str, bgcolor=ft.colors.GREEN_800):
+        """线程安全的 SnackBar 提示（自动回 UI 线程）。"""
+        async def _do():
+            page = self.app.page
+            try:
+                page.open(ft.SnackBar(ft.Text(message), bgcolor=bgcolor))
+            except Exception:
+                pass
+        self._post_ui(_do)
+
     # ── 数据加载 ──────────────────────────────────────────────────────────────
 
     def _load_data(self) -> None:
-        """后台线程：读注册表 + 计算各目录大小，完成后更新 UI。"""
+        """后台线程：读注册表 + 计算各目录大小，完成后回 UI 线程更新控件。"""
         try:
             folders = get_shell_folders()   # 读注册表
         except Exception:
@@ -103,13 +111,15 @@ class MigrationView(ft.Column):
                 self._make_card(label, str(path), size_bytes, icon, on_c, key)
             )
 
-        # 切回主线程更新控件
-        try:
-            self._loading.visible = False
-            self._cards_col.controls = cards
-            self.update()
-        except Exception:
-            pass   # 视图已被销毁（用户切换到其他页面），静默忽略
+        async def _apply():
+            try:
+                self._loading.visible = False
+                self._cards_col.controls = cards
+                self.update()
+            except Exception:
+                pass   # 视图已被销毁（用户切换到其他页面），静默忽略
+
+        self._post_ui(_apply)
 
     # ── 卡片组件 ──────────────────────────────────────────────────────────────
 
@@ -251,35 +261,25 @@ class MigrationView(ft.Column):
                 report = plan.preflight()
                 if not report.ok:
                     logger.warning(f"前置检查未通过: {report.issues}")
-                    self.app.page.snack_bar = ft.SnackBar(
-                        ft.Text("前置检查未通过：" + "；".join(report.issues)),
-                        bgcolor=ft.colors.RED_900,
-                    )
-                    self.app.page.snack_bar.open = True
-                    self.app.page.update()
+                    self._snack("前置检查未通过：" + "；".join(report.issues), bgcolor=ft.colors.RED_900)
                     return
                 logger.info(f"前置检查通过，开始迁移 ({report.total_size_gb:.2f} GB)")
                 plan.execute()
                 logger.info(f"迁移完成: {label}")
-                self.app.page.snack_bar = ft.SnackBar(
-                    ft.Text(f"搬家完成！已释放约 {_fmt_size(report.total_size_bytes)}"),
-                    bgcolor=ft.colors.GREEN_800,
-                )
-                self.app.page.snack_bar.open = True
-                self.app.page.update()
-                # 刷新本视图数据
-                self._cards_col.controls = []
-                self._loading.visible = True
-                self.app.page.update()
+                self._snack(f"搬家完成！已释放约 {_fmt_size(report.total_size_bytes)}", bgcolor=ft.colors.GREEN_800)
+                # 回 UI 线程刷新本视图数据
+                async def _refresh():
+                    try:
+                        self._cards_col.controls = []
+                        self._loading.visible = True
+                        self.update()
+                    except Exception:
+                        pass
+                self._post_ui(_refresh)
                 threading.Thread(target=self._load_data, daemon=True).start()
             except Exception as exc:
                 logger.error(f"迁移出错: {exc}", exc_info=True)
-                self.app.page.snack_bar = ft.SnackBar(
-                    ft.Text(f"迁移出错：{exc}"),
-                    bgcolor=ft.colors.RED_900,
-                )
-                self.app.page.snack_bar.open = True
-                self.app.page.update()
+                self._snack(f"迁移出错：{exc}", bgcolor=ft.colors.RED_900)
 
         threading.Thread(target=_run, daemon=True).start()
 
@@ -317,23 +317,20 @@ class MigrationView(ft.Column):
                     logger.info(f"开始还原 [{label}] (key={reg_key})")
                     msg = restore_folder(reg_key)
                     logger.info(f"还原结果: {msg}")
-                    self.app.page.snack_bar = ft.SnackBar(
-                        ft.Text(msg), bgcolor=ft.colors.GREEN_800,
-                    )
-                    self.app.page.snack_bar.open = True
-                    self.app.page.update()
-                    # 刷新视图
-                    self._cards_col.controls = []
-                    self._loading.visible = True
-                    self.update()
+                    self._snack(msg, bgcolor=ft.colors.GREEN_800)
+                    # 回 UI 线程刷新视图
+                    async def _refresh():
+                        try:
+                            self._cards_col.controls = []
+                            self._loading.visible = True
+                            self.update()
+                        except Exception:
+                            pass
+                    self._post_ui(_refresh)
                     threading.Thread(target=self._load_data, daemon=True).start()
                 except Exception as exc:
                     logger.error(f"还原失败 [{label}]: {exc}", exc_info=True)
-                    self.app.page.snack_bar = ft.SnackBar(
-                        ft.Text(f"还原失败：{exc}"), bgcolor=ft.colors.RED_900,
-                    )
-                    self.app.page.snack_bar.open = True
-                    self.app.page.update()
+                    self._snack(f"还原失败：{exc}", bgcolor=ft.colors.RED_900)
 
             threading.Thread(target=_run, daemon=True).start()
 

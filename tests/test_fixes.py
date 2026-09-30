@@ -139,18 +139,35 @@ class TestAuthSecret(unittest.TestCase):
 # F4: auth.py JWT 验证警告日志
 # ═══════════════════════════════════════════════════════════════════════════
 class TestJWTVerificationWarning(unittest.TestCase):
-    """验证 JWT 签名验证被禁用时有明确警告"""
+    """JWT 验签：未配置密钥时保持禁用告警；配置后走真实验签"""
 
     def test_jwt_warning_in_source(self):
         auth_path = _SRC_DIR / "core" / "auth.py"
         source = auth_path.read_text(encoding="utf-8")
         self.assertIn("JWT signature verification is DISABLED", source)
 
-    def test_jwt_todo_comment_exists(self):
-        auth_path = _SRC_DIR / "core" / "auth.py"
-        source = auth_path.read_text(encoding="utf-8")
-        self.assertIn("TODO", source)
-        self.assertIn("签名验证", source)
+    def test_jwt_verify_infrastructure_exists(self):
+        """v0.1.8 起 JWT 验签基础设施落地：配置 ZC_JWT_SECRET / ZC_JWT_PUBLIC_KEY 即启用"""
+        import sys
+        if str(_SRC_DIR) not in sys.path:
+            sys.path.insert(0, str(_SRC_DIR))
+        from core import auth
+        # 未配置密钥时返回 (None, None) → 走历史降级路径
+        import unittest.mock as mock
+        with mock.patch.dict("os.environ", {}, clear=False):
+            import os
+            env = {k: v for k, v in os.environ.items() if k not in ("ZC_JWT_SECRET", "ZC_JWT_PUBLIC_KEY")}
+            with mock.patch.dict("os.environ", env, clear=True):
+                key, algos = auth._get_jwt_verify_key()
+        self.assertIsNone(key)
+        self.assertIsNone(algos)
+        # 配置对称密钥后启用 HS256 验签
+        with mock.patch.dict("os.environ", {"ZC_JWT_SECRET": "unit-test-secret"}):
+            key, algos = auth._get_jwt_verify_key()
+        self.assertEqual(key, "unit-test-secret")
+        self.assertEqual(algos, ["HS256"])
+        # 统一解码入口存在
+        self.assertTrue(callable(auth._decode_jwt))
 
 
 # ═══════════════════════════════════════════════════════════════════════════

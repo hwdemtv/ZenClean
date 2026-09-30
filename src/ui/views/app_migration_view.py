@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from core.app_migrator import AppMigrator, APP_TARGETS, resolve_target_path
 from core.system_migrator import SystemMigrator
 from core.patch_analyzer import PatchCacheAnalyzer
+from ui.utils import fmt_size
 from config.settings import COLOR_ZEN_PRIMARY, COLOR_ZEN_TEXT_MAIN, COLOR_ZEN_TEXT_DIM
 
 class AppMigrationView(ft.Column):
@@ -58,6 +59,16 @@ class AppMigrationView(ft.Column):
         
         # 挂载后启动后台数据加载
         self.did_mount = self.load_data
+
+    def will_unmount(self):
+        # 本视图每次导航都会强制重建（见 app.py 的重建白名单），
+        # load_data 中追加到 page.overlay 的 FilePicker 必须在卸载时移除，
+        # 否则每次进入页面都会泄漏一个 FilePicker 到 overlay。
+        try:
+            if self.file_picker in self.app.page.overlay:
+                self.app.page.overlay.remove(self.file_picker)
+        except Exception:
+            pass
 
     def load_data(self):
         """加载应用体积和历史记录"""
@@ -279,9 +290,18 @@ class AppMigrationView(ft.Column):
             self.app.page.dialog.open = False
             self.app.page.update()
 
-            ok, msg = self.migrator.rollback_interrupted_migration(target_id)
-            self.app.show_snack_bar(msg, is_error=not ok)
-            self.load_data()
+            # 回滚涉及大文件搬移，放入后台线程执行，避免冻结 UI
+            def _run():
+                ok, msg = self.migrator.rollback_interrupted_migration(target_id)
+
+                async def _done():
+                    self.app.show_snack_bar(msg, is_error=not ok)
+                    self.load_data()
+
+                if self.app.page:
+                    self.app.page.run_task(_done)
+
+            threading.Thread(target=_run, daemon=True).start()
 
         self.app.page.dialog = ft.AlertDialog(
             title=ft.Row([ft.Icon(ft.icons.WARNING, color=ft.colors.RED_400), ft.Text("确认回滚？")]),
@@ -296,7 +316,7 @@ class AppMigrationView(ft.Column):
 
     def _on_clear_interrupted_state(self, target_id: str):
         """清除中断状态（不可恢复时）"""
-        self.migrator._clear_state(target_id)
+        self.migrator.clear_interrupted_state(target_id)
         self.app.show_snack_bar("已清除中断状态")
         self.load_data()
 
@@ -382,11 +402,7 @@ class AppMigrationView(ft.Column):
 
     def _fmt_size(self, size_bytes):
         if size_bytes == 0: return "未检测到数据"
-        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
-            if size_bytes < 1024:
-                return f"{size_bytes:.2f} {unit}"
-            size_bytes /= 1024
-        return f"{size_bytes:.2f} PB"
+        return fmt_size(size_bytes)
 
     def _build_app_card(self, target, precomputed_size=None):
         """构建待搬家应用的卡片 - 采用宽行布局（单列）"""
@@ -581,21 +597,40 @@ class AppMigrationView(ft.Column):
             self.app.page.dialog.open = False
             self.app.page.update()
             self.app.show_snack_bar("正在尝试优雅关闭相关进程...")
-            ok, msg = self.migrator.kill_target_processes_gracefully(target.id)
-            if ok:
-                self._pick_destination_and_run(target)
-            else:
-                self.app.show_snack_bar(msg, is_error=True)
+
+            # 优雅关闭含等待超时，放入后台线程，避免阻塞 UI 事件循环
+            def _run():
+                ok, msg = self.migrator.kill_target_processes_gracefully(target.id)
+
+                async def _done():
+                    if ok:
+                        self._pick_destination_and_run(target)
+                    else:
+                        self.app.show_snack_bar(msg, is_error=True)
+
+                if self.app.page:
+                    self.app.page.run_task(_done)
+
+            threading.Thread(target=_run, daemon=True).start()
 
         def _do_force_kill(e):
             """强制关闭"""
             self.app.page.dialog.open = False
             self.app.page.update()
-            ok, msg = self.migrator.kill_target_processes(target.id)
-            if ok:
-                self._pick_destination_and_run(target)
-            else:
-                self.app.show_snack_bar(msg, is_error=True)
+
+            def _run():
+                ok, msg = self.migrator.kill_target_processes(target.id)
+
+                async def _done():
+                    if ok:
+                        self._pick_destination_and_run(target)
+                    else:
+                        self.app.show_snack_bar(msg, is_error=True)
+
+                if self.app.page:
+                    self.app.page.run_task(_done)
+
+            threading.Thread(target=_run, daemon=True).start()
 
         # 根据目标类别决定警告级别
         is_browser = target.category == "browser_cache"

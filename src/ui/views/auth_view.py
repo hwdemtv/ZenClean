@@ -1,4 +1,5 @@
 import os
+import asyncio
 import flet as ft
 from datetime import datetime
 from config.settings import (
@@ -224,24 +225,24 @@ class AuthView(ft.Column):
         dlg.open = False
         self.page.update()
 
-    def _on_submit(self, e):
+    async def _on_submit(self, e):
         code = self._code_input.value.strip()
-        
+
         if not self._agree_checkbox.value:
             self._error_text.value = "请先勾选同意免责声明与隐私协议"
             self._error_text.visible = True
             self.page.update()
             self.update()
             return
-            
+
         if not code:
             self._error_text.value = "请输入激活码"
             self._error_text.visible = True
             self.update()
             return
-            
+
         self._error_text.visible = False
-        
+
         import traceback
         from core.logger import logger
         try:
@@ -250,15 +251,15 @@ class AuthView(ft.Column):
             e.control.disabled = True
             e.control.text = "正在联网效验..."
             self.update()
-            
+
             logger.info(f"Starting online verification for code: {code}")
             from core.auth import verify_license_online
-            # 修正签名解包，增加通知处理
-            success, msg, note = verify_license_online(code)
+            # 同步 HTTP 请求放入线程池执行，避免阻塞 UI 事件循环导致"正在效验"文案无法渲染
+            success, msg, note = await asyncio.to_thread(verify_license_online, code)
             if note:
                 self.app.process_server_notification(note)
             logger.info(f"Online verification result: success={success}, msg={msg}")
-            
+
             # 恢复 UI 状态
             self._code_input.disabled = False
             e.control.disabled = False
@@ -315,11 +316,12 @@ class AuthView(ft.Column):
         self.update()
 
         def _update_callback(has_new, latest_version, url, msg):
-            def _ui_update():
+            # 本回调运行于 updater 的后台线程，必须经 run_task 回 UI 线程
+            async def _ui_update():
                 btn.disabled = False
                 btn.text = "检查更新"
                 self.update()
-                
+
                 if has_new:
                     dlg = ft.AlertDialog(
                         title=ft.Row([
@@ -343,15 +345,15 @@ class AuthView(ft.Column):
                     dlg.open = True
                     self.page.update()
                 else:
-                    self.page.snack_bar = ft.SnackBar(
-                        ft.Text(msg),
-                        bgcolor=COLOR_ZEN_PRIMARY if "最新版本" in msg else ft.colors.RED_400
+                    self.page.open(
+                        ft.SnackBar(
+                            ft.Text(msg),
+                            bgcolor=COLOR_ZEN_PRIMARY if "最新版本" in msg else ft.colors.RED_400
+                        )
                     )
-                    self.page.snack_bar.open = True
-                    self.page.update()
-                    
+
             if self.page:
-                _ui_update()
+                self.page.run_task(_ui_update)
 
         from core.updater import check_for_updates
         check_for_updates(_update_callback, manual=True)
@@ -371,9 +373,9 @@ class AuthView(ft.Column):
             try:
                 from utils.network_diag import run_full_diagnosis
                 report = run_full_diagnosis(LICENSE_SERVER_URLS)
-                
-                # 在主线程中更新UI
-                def _update_ui():
+
+                # 诊断线程不可直接操作 UI，经 run_task 回主线程展示结果
+                async def _update_ui():
                     dlg = ft.AlertDialog(
                         title=ft.Text("网络诊断结果"),
                         content=ft.Column([
@@ -388,29 +390,28 @@ class AuthView(ft.Column):
                     self.page.overlay.append(dlg)
                     dlg.open = True
                     self.page.update()
-                    
+
                     # 恢复诊断按钮
                     self._diag_button.text = "网络连接有问题？点击进行诊断"
                     self._diag_button.disabled = False
                     self.update()
-                
-                _update_ui()
-                
+
+                if self.page:
+                    self.page.run_task(_update_ui)
+
             except Exception as ex:
                 logger.error(f"网络诊断失败: {ex}")
-                def _show_error():
-                    self.page.snack_bar = ft.SnackBar(
-                        ft.Text(f"诊断失败: {ex}"),
-                        bgcolor=ft.colors.RED_400
-                    )
-                    self.page.snack_bar.open = True
-                    self.page.update()
-                    
+
+                async def _show_error():
+                    self.page.open(ft.SnackBar(ft.Text(f"诊断失败: {ex}"), bgcolor=ft.colors.RED_400))
+
                     self._diag_button.text = "网络连接有问题？点击进行诊断"
                     self._diag_button.disabled = False
                     self.update()
-                _show_error()
-        
+
+                if self.page:
+                    self.page.run_task(_show_error)
+
         threading.Thread(target=_diagnose, daemon=True).start()
     
     def _copy_to_clipboard(self, text: str):
@@ -436,8 +437,16 @@ class AuthView(ft.Column):
                 if quota and hasattr(self, "_quota_text"):
                     used = quota.get('used_today', 0)
                     limit = quota.get('daily_limit', 0)
-                    self._quota_text.value = f"今日版图测绘算力：已消耗 {used} / 共 {limit} 次"
-                    self._quota_text.italic = False
+
+                    # 加载线程不可直接刷新控件，回 UI 线程更新
+                    async def _apply():
+                        try:
+                            self._quota_text.value = f"今日版图测绘算力：已消耗 {used} / 共 {limit} 次"
+                            self._quota_text.italic = False
+                            self.update()
+                        except Exception:
+                            pass  # 视图已销毁
+
                     if self.page:
-                        self.update()
+                        self.page.run_task(_apply)
             threading.Thread(target=_load, daemon=True).start()

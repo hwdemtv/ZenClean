@@ -6,12 +6,23 @@ from typing import Optional, List
 
 from core.scanner import ScanWorker
 from ai.cloud_engine import get_quota
+from ui.utils import fmt_size
 
 
 from config.settings import (
-    COLOR_ZEN_PRIMARY, COLOR_ZEN_BG, COLOR_ZEN_GOLD, 
-    COLOR_ZEN_TEXT_MAIN, COLOR_ZEN_TEXT_DIM
+    COLOR_ZEN_PRIMARY, COLOR_ZEN_BG, COLOR_ZEN_GOLD,
+    COLOR_ZEN_TEXT_MAIN, COLOR_ZEN_TEXT_DIM, APP_DATA_DIR
 )
+
+
+def _space_cache_path() -> str:
+    """空间雷达快照缓存路径。
+
+    存放于 %APPDATA%\\ZenClean\\ 而非 os.getcwd()：
+    工作目录随启动方式变化（开机自启/右键菜单的 cwd 不同），
+    会导致缓存时有时无；且打包后 cwd 可能是不可写目录。
+    """
+    return str(APP_DATA_DIR / "zenclean_space_cache.json")
 
 # 风险等级 → 徽章颜色 (应用柔和色调)
 _RISK_COLOR = {
@@ -501,8 +512,13 @@ class ScanView(ft.Column):
 
     # ── 扫描启动 ──────────────────────────────────────────────────────────────
 
-    def _start_scan(self, e) -> None:
-        """立刻进入扫描态，同时在后台异步核验权限（先上车后补票）。"""
+    def _start_scan(self, e, targets=None) -> None:
+        """立刻进入扫描态，同时在后台异步核验权限（先上车后补票）。
+
+        Args:
+            targets: 可选的靶向目录列表（右键菜单"用 ZenClean 分析"传入指定路径时使用）；
+                     为 None 时扫描 settings.SCAN_TARGETS 全量靶区。
+        """
         # 1. 立即清空上次扫描结果
         self.app.scan_nodes.clear()
 
@@ -527,7 +543,8 @@ class ScanView(ft.Column):
         self._worker = ScanWorker(
             on_nodes=lambda nodes: self.app.page.run_task(self._handle_scan_nodes_ui, nodes),
             on_done=lambda total, skipped: self.app.page.run_task(self._handle_scan_done_ui, total, skipped),
-            on_error=lambda msg: self.app.page.run_task(self._handle_scan_error_ui, msg)
+            on_error=lambda msg: self.app.page.run_task(self._handle_scan_error_ui, msg),
+            targets=targets,
         )
         self._worker.start()
 
@@ -605,9 +622,9 @@ class ScanView(ft.Column):
             auto_path = self.app.auto_scan_path
             self.app.auto_scan_path = None  # 立刻吞掉，防止路由切换时反复触发
             if os.path.exists(auto_path):
-                self.app.scan_nodes = [auto_path]
-                # Flet 较新版本 run_task 强制要求异步协程，普通函数直接调用即可
-                self._start_scan(None)
+                # 靶向扫描 IPC 传入的目录（此前该路径被忽略，退化成了全量靶区扫描）
+                from pathlib import Path as _Path
+                self._start_scan(None, targets=[_Path(auto_path)])
 
         # ── 0.1 消费托盘"一键健康扫描"标志 ──
         if getattr(self.app, "_auto_start_scan", False):
@@ -626,7 +643,7 @@ class ScanView(ft.Column):
             self._time_status_text.value = f"预计扫查耗时 {random.uniform(1.6, 2.4):.1f}s · 深度提权模式已开启"
         self._safe_update(self._time_status_text)
 
-        cache_path = os.path.join(os.getcwd(), "zenclean_space_cache.json")
+        cache_path = _space_cache_path()
         has_cache = os.path.exists(cache_path)
         
         # ── 1. 容量完全体瞬间复原 vs 甜甜圈装载动效 ──
@@ -697,7 +714,7 @@ class ScanView(ft.Column):
             from core.space_analyzer import stream_top_folders
             from core.logger import logger
             
-            cache_path = os.path.join(os.getcwd(), "zenclean_space_cache.json")
+            cache_path = _space_cache_path()
             
             def _render_item(item_data, rank):
                 # 统一渲染单个卡片的逻辑
@@ -842,13 +859,7 @@ class ScanView(ft.Column):
             if n.get("risk_level") in ("LOW", "MEDIUM")
         )
         self._counter_text.value = f"已发现 {total:,} 个文件"
-        gb = freed / 1024 ** 3
-        if freed >= 1024 ** 3:
-            self._size_text.value = f"可释放空间：{gb:.2f} GB"
-        elif freed >= 1024 ** 2:
-            self._size_text.value = f"可释放空间：{freed / 1024**2:.1f} MB"
-        else:
-            self._size_text.value = f"可释放空间：{freed / 1024:.0f} KB"
+        self._size_text.value = f"可释放空间：{fmt_size(freed)}"
             
 
 

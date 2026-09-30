@@ -43,10 +43,11 @@ class TestZenCleanEngine(unittest.TestCase):
         self.assertEqual(res6["risk_level"], "MEDIUM")
         
     def test_unknown_fallback(self):
-        # 验证未知文件 (未命中任何规则且不在白名单) 
-        # 注意：在第二阶段及以后，dispatch 会尝试云端提权，如果命中缓存可能返回 MEDIUM
+        # 验证未知文件 (未命中任何规则且不在白名单)
+        # 注意：云端分析已异步化——缓存未命中时 dispatch 返回 ANALYZING 占位符，
+        # 真实结果稍后经回调链写入；命中缓存时直接返回缓存级别
         res = dispatch(r"C:\Users\Admin\Desktop\MyContract.pdf")
-        self.assertIn(res["risk_level"], ["UNKNOWN", "MEDIUM"]) # 兼容云端提权后的结果
+        self.assertIn(res["risk_level"], ["UNKNOWN", "MEDIUM", "ANALYZING"])
 
 
 if __name__ == '__main__':

@@ -8,6 +8,7 @@ import os
 import uuid
 import json
 import shutil
+import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -18,6 +19,11 @@ from core.logger import logger
 QUARANTINE_REGISTRY_PATH = APP_DATA_DIR / "quarantine_registry.json"
 # 默认隔离阈值（天）
 DEFAULT_RETENTION_DAYS = 3
+
+# 注册表读-改-写全周期锁：
+# 启动时的后台自动清理线程（main.py）与 UI 线程的恢复/删除操作会并发访问
+# 同一 JSON 注册表，无锁的 load→mutate→save 会互相覆盖丢更新。
+_registry_lock = threading.RLock()
 
 
 def _get_best_sandbox_dir() -> Path:
@@ -58,15 +64,22 @@ def _load_registry() -> dict:
 
 
 def _save_registry(registry: dict) -> None:
+    """原子化保存注册表：先写临时文件再 os.replace 替换。
+
+    直接覆盖写主文件时若进程崩溃（写一半），整个注册表会损坏，
+    用户的全部"后悔药"记录丢失且沙箱文件沦为孤儿。
+    """
     try:
         QUARANTINE_REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with open(QUARANTINE_REGISTRY_PATH, "w", encoding="utf-8") as f:
+        tmp_path = QUARANTINE_REGISTRY_PATH.with_suffix(".json.tmp")
+        with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(registry, f, indent=2, ensure_ascii=False)
+        os.replace(tmp_path, QUARANTINE_REGISTRY_PATH)
     except Exception as e:
         logger.error(f"Failed to save quarantine registry: {e}")
 
 
-def quarantine(source_path: str, size_bytes: int = 0) -> bool:
+def _quarantine_impl(source_path: str, size_bytes: int = 0) -> bool:
     """
     将目标文件/文件夹隔离到沙箱中
     返回是否隔离成功
@@ -114,7 +127,7 @@ def quarantine(source_path: str, size_bytes: int = 0) -> bool:
         return False
 
 
-def restore(q_id: str) -> bool:
+def _restore_impl(q_id: str) -> bool:
     """
     将沙箱中的文件原路恢复
     """
@@ -153,7 +166,7 @@ def restore(q_id: str) -> bool:
         return False
 
 
-def list_quarantined() -> list[dict]:
+def _list_quarantined_impl() -> list[dict]:
     """返回当前处于隔离状态的所有项目列表，按时间倒序"""
     registry = _load_registry()
     items = []
@@ -164,7 +177,7 @@ def list_quarantined() -> list[dict]:
     return items
 
 
-def auto_clean_expired(days: int = DEFAULT_RETENTION_DAYS) -> int:
+def _auto_clean_expired_impl(days: int = DEFAULT_RETENTION_DAYS) -> int:
     """
     静默销毁过期沙箱文件，返回释放的字节数
     """
@@ -202,7 +215,7 @@ def auto_clean_expired(days: int = DEFAULT_RETENTION_DAYS) -> int:
         
     return freed
 
-def delete_item(q_id: str) -> bool:
+def _delete_item_impl(q_id: str) -> bool:
     """手动彻底删除沙箱内的某个项目"""
     registry = _load_registry()
     if q_id not in registry:
@@ -223,7 +236,7 @@ def delete_item(q_id: str) -> bool:
         logger.error(f"Failed to delete {q_id} permanently: {e}")
         return False
 
-def clear_all() -> int:
+def _clear_all_impl() -> int:
     """清空所有隔离沙箱内的项目，返回释放的字节数"""
     registry = _load_registry()
     freed = 0
@@ -244,7 +257,7 @@ def clear_all() -> int:
     _save_registry(registry)
     return freed
 
-def restore_all() -> tuple[int, int]:
+def _restore_all_impl() -> tuple[int, int]:
     """批量原路恢复隔离沙箱内的所有项目，返回(成功恢复数量, 失败数量)"""
     registry = _load_registry()
     success_count = 0
@@ -285,3 +298,46 @@ def restore_all() -> tuple[int, int]:
         
     return success_count, fail_count
 
+# ── 公开 API：注册表读-改-写全周期加锁 ───────────────────────────────────────
+# 后台自动清理线程与 UI 线程并发调用时，保证 load→mutate→save 原子可见。
+
+def quarantine(source_path: str, size_bytes: int = 0) -> bool:
+    """将目标文件/文件夹隔离到沙箱中，返回是否隔离成功"""
+    with _registry_lock:
+        return _quarantine_impl(source_path, size_bytes)
+
+
+def restore(q_id: str) -> bool:
+    """将沙箱中的文件原路恢复"""
+    with _registry_lock:
+        return _restore_impl(q_id)
+
+
+def list_quarantined() -> list[dict]:
+    """返回当前处于隔离状态的所有项目列表，按时间倒序"""
+    with _registry_lock:
+        return _list_quarantined_impl()
+
+
+def auto_clean_expired(days: int = DEFAULT_RETENTION_DAYS) -> int:
+    """静默销毁过期沙箱文件，返回释放的字节数"""
+    with _registry_lock:
+        return _auto_clean_expired_impl(days)
+
+
+def delete_item(q_id: str) -> bool:
+    """手动彻底删除沙箱内的某个项目"""
+    with _registry_lock:
+        return _delete_item_impl(q_id)
+
+
+def clear_all() -> int:
+    """清空所有隔离沙箱内的项目，返回释放的字节数"""
+    with _registry_lock:
+        return _clear_all_impl()
+
+
+def restore_all() -> tuple[int, int]:
+    """批量原路恢复隔离沙箱内的所有项目，返回(成功恢复数量, 失败数量)"""
+    with _registry_lock:
+        return _restore_all_impl()

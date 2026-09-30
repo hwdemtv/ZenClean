@@ -82,3 +82,7 @@ contexts/
 *_优化方案.md
 *_深度分析报告.md
 *_排查指南.md
+
+# 归档目录:发布包与旧构建产物不入库(仅保留磁盘归档)
+archive/releases/
+archive/dist_old/

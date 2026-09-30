@@ -6,6 +6,7 @@ from config.settings import (
 )
 from ui.components.file_list_item import FileListItem
 from ui.components.dialogs import show_confirm_clean_dialog, show_empty_recycle_bin_dialog
+from ui.utils import fmt_size as _fmt_size
 
 # 分类ID → 中文标签 + 图标
 _CATEGORY_META: dict[str, tuple[str, str]] = {
@@ -144,16 +145,6 @@ def _build_category_chart(groups: dict[str, list[dict]]) -> ft.Container:
         bgcolor=ft.colors.with_opacity(0.02, ft.colors.SURFACE_VARIANT),
         margin=ft.margin.only(bottom=6)
     )
-
-def _fmt_size(size_bytes: int) -> str:
-    """将字节数格式化为人类可读字符串。"""
-    if size_bytes >= 1024 ** 3:
-        return f"{size_bytes / 1024 ** 3:.2f} GB"
-    if size_bytes >= 1024 ** 2:
-        return f"{size_bytes / 1024 ** 2:.1f} MB"
-    if size_bytes >= 1024:
-        return f"{size_bytes / 1024:.0f} KB"
-    return f"{size_bytes} B"
 
 class ResultView(ft.Column):
     def __init__(self, app):

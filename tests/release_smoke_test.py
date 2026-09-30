@@ -14,12 +14,19 @@ class ReleaseSmokeTest(unittest.TestCase):
     """
 
     def test_version_consistency(self):
-        """验证版本号管理是否统一"""
+        """验证版本号管理是否统一（单一来源：config/version.py，CHANGELOG 必须同步）"""
         from config.version import __version__
-        from config.settings import APP_VERSION
         print(f"Checking version: {__version__}")
-        self.assertEqual(__version__, APP_VERSION, "Global version must match settings version!")
         self.assertTrue(__version__.startswith("0.1."), "Version should be 0.1.x series")
+
+        # CHANGELOG.md 必须包含当前版本条目，防止发版漏改文档
+        changelog = _ROOT / "CHANGELOG.md"
+        if changelog.exists():
+            content = changelog.read_text(encoding="utf-8")
+            self.assertIn(
+                f"[{__version__}]", content,
+                f"CHANGELOG.md 缺少当前版本 [{__version__}] 的条目，发布前请同步更新！",
+            )
 
     def test_rule_kb_loading(self):
         """验证 AI 知识库是否完整加载"""

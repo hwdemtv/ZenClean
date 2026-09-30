@@ -1,13 +1,11 @@
 import os
+import hashlib
+import asyncio
 import flet as ft
 from typing import Optional
 from datetime import datetime
 
 from config.settings import (
-    AUTH_DAT_PATH,
-    LICENSE_PRODUCT_ID,
-    LICENSE_SERVER_URLS,
-    NTP_MAX_DRIFT_SECONDS,
     COLOR_ZEN_BG, COLOR_ZEN_SURFACE,
     COLOR_ZEN_GOLD, COLOR_ZEN_DIVIDER, COLOR_ZEN_TEXT_MAIN, COLOR_ZEN_TEXT_DIM,
     COLOR_ZEN_PRIMARY
@@ -187,31 +185,38 @@ class ZenCleanApp(ft.Column):
         self._start_silent_update_check()
         
     def on_ai_batch_done(self, results_map: dict):
-        """AI 批次分析完成后的全局回调。由 BatchProcessor 触发。"""
-        # 1. 更新 scan_nodes 中 ANALYZING 状态的节点
-        for node in self.scan_nodes:
-            if node.get("risk_level") != "ANALYZING":
-                continue
-            # 优先使用 _ai_query_key 精确匹配，否则尝试路径归一化模糊匹配
-            query_key = node.get("_ai_query_key")
-            if query_key and query_key in results_map:
-                result = results_map[query_key]
-                node.update(result)
-                node.pop("_ai_query_key", None)
-            else:
-                # 降级匹配：遍历 results_map 做路径归一化比较
-                node_dir = os.path.dirname(node.get("path", "")).rstrip("\\/").lower()
-                for res_path, result in results_map.items():
-                    norm_res_path = res_path.rstrip("\\/").lower()
-                    if node_dir == norm_res_path or node_dir.endswith(norm_res_path):
-                        node.update(result)
-                        node.pop("_ai_query_key", None)
-                        break
+        """AI 批次分析完成后的全局回调。由 BatchProcessor 工作线程触发。
+        scan_nodes 与 UI 控件同属 UI 线程，所有变更统一经 run_task 回主线程执行，
+        避免与 ResultView 的迭代逻辑发生数据竞争。"""
+        async def _apply():
+            # 1. 更新 scan_nodes 中 ANALYZING 状态的节点
+            for node in self.scan_nodes:
+                if node.get("risk_level") != "ANALYZING":
+                    continue
+                # 优先使用 _ai_query_key 精确匹配，否则尝试路径归一化模糊匹配
+                query_key = node.get("_ai_query_key")
+                if query_key and query_key in results_map:
+                    result = results_map[query_key]
+                    node.update(result)
+                    node.pop("_ai_query_key", None)
+                else:
+                    # 降级匹配：遍历 results_map 做路径归一化比较
+                    node_dir = os.path.dirname(node.get("path", "")).rstrip("\\/").lower()
+                    for res_path, result in results_map.items():
+                        norm_res_path = res_path.rstrip("\\/").lower()
+                        if node_dir == norm_res_path or node_dir.endswith(norm_res_path):
+                            node.update(result)
+                            node.pop("_ai_query_key", None)
+                            break
 
-        # 2. 通知当前视图刷新
-        current_view = self._page_container.content
-        if hasattr(current_view, "on_ai_batch_done"):
-            self.page.run_task(current_view.on_ai_batch_done, results_map)
+            # 2. 通知当前视图刷新
+            current_view = self._page_container.content
+            if hasattr(current_view, "on_ai_batch_done"):
+                maybe_coro = current_view.on_ai_batch_done(results_map)
+                if asyncio.iscoroutine(maybe_coro):
+                    await maybe_coro
+
+        self.page.run_task(_apply)
 
     def _start_silent_update_check(self):
         import time
@@ -221,12 +226,13 @@ class ZenCleanApp(ft.Column):
         def _silent_callback(has_new, latest_version, url, msg):
             if has_new:
                 # 接收到含更新的高能通知，展示顶部卡片式通知条 (方案 B)
-                def _ui_update():
+                # 注意：本回调运行于 updater 的后台线程，必须经 run_task 回 UI 线程
+                async def _ui_update():
                     # 提取第一行作为摘要，防止文字墙
                     summary = msg.split('\n')[0][:60]
                     if len(msg.split('\n')) > 1 or len(msg) > 60:
                         summary += "..."
-                        
+
                     self.show_notification(
                         title=f"发现新版本 v{latest_version}",
                         content=summary,
@@ -236,9 +242,9 @@ class ZenCleanApp(ft.Column):
                             ("查看日志", lambda: self._show_markdown_dialog(f"ZenClean v{latest_version} 更新日志", msg), False)
                         ]
                     )
-                
+
                 if self.page:
-                    _ui_update()
+                    self.page.run_task(_ui_update)
                 
         def _delayed_check():
             time.sleep(8)  # 避开启动首屏资源高峰
@@ -311,26 +317,30 @@ class ZenCleanApp(ft.Column):
     def process_server_notification(self, note: dict):
         """
         处理来自后端的广播通知载荷，实现去重展示与强/弱提醒分离。
+        可能由后台鉴权线程调用，整体经 run_task 回 UI 线程执行（含 client_storage 访问）。
         """
         if not note or not self.page: return
-        note_id = note.get("id")
-        content = note.get("content", "")
-        # 生成唯一标识：ID + 内容摘要，支持“同 ID 内容更新”重新提醒
-        notice_fingerprint = f"{note_id}_{hash(content)}"
-        
-        last_fingerprint = self.page.client_storage.get("last_notice_fingerprint")
-        
-        from core.logger import logger
-        logger.info(f"[Notification] Check: {notice_fingerprint}, Last: {last_fingerprint}")
-        
-        if last_fingerprint == notice_fingerprint:
-            return
 
-        is_force = note.get("is_force", False)
-        title = note.get("title", "系统消息")
-        url = note.get("action_url")
-        
-        async def _ui_action():
+        async def _handle():
+            note_id = note.get("id")
+            content = note.get("content", "")
+            # 生成唯一标识：ID + 内容摘要，支持“同 ID 内容更新”重新提醒
+            # 注意：必须使用稳定摘要（md5）。内置 hash() 每进程随机化，重启后指纹必然变化，去重会失效。
+            content_digest = hashlib.md5(content.encode("utf-8")).hexdigest()
+            notice_fingerprint = f"{note_id}_{content_digest}"
+
+            last_fingerprint = self.page.client_storage.get("last_notice_fingerprint")
+
+            from core.logger import logger
+            logger.info(f"[Notification] Check: {notice_fingerprint}, Last: {last_fingerprint}")
+
+            if last_fingerprint == notice_fingerprint:
+                return
+
+            is_force = note.get("is_force", False)
+            title = note.get("title", "系统消息")
+            url = note.get("action_url")
+
             if is_force:
                 def _close(e):
                     dlg.open = False
@@ -355,19 +365,19 @@ class ZenCleanApp(ft.Column):
                 actions = []
                 if url:
                     actions.append(("去看看", lambda: self.page.launch_url(url), True))
-                
+
                 self.show_notification(
                     title=title,
                     content=summary,
                     icon=ft.icons.NOTIFICATIONS,
                     actions=actions
                 )
-            
+
             self.page.update()
             # 记录指纹，用于去重
             self.page.client_storage.set("last_notice_fingerprint", notice_fingerprint)
 
-        self.page.run_task(_ui_action)
+        self.page.run_task(_handle)
 
     def show_notification(self, title: str, content: str, icon: str = ft.icons.INFO, actions: list = None):
         """
@@ -513,6 +523,11 @@ class ZenCleanApp(ft.Column):
             self._divider.visible = True
             self._title_bar.visible = True
 
+        # 同步侧边栏高亮，防止编程式导航（IPC 拉起扫描/结果页跳转）后 Rail 与实际页面错位
+        _route_to_idx = {"/scan": 0, "/migration": 1, "/auth": 2, "/quarantine": 3, "/settings": 4}
+        if route in _route_to_idx:
+            self._nav_rail.selected_index = _route_to_idx[route]
+
         self._page_container.content = self._view_cache[route]
         self.update()
 
@@ -522,22 +537,27 @@ class ZenCleanApp(ft.Column):
             view.start()
 
     def trigger_auto_scan(self, path: str):
-        """主实例通过 IPC 接收到扫描请求时的分发接口"""
+        """主实例通过 IPC 守护线程接收到扫描请求时的分发接口。
+        IPC 线程不可直接触碰 UI，统一经 run_task 回主线程执行。"""
         if not path or not os.path.exists(path):
             return
-        self.auto_scan_path = path
-        # 强制重建 ScanView 以触发 did_mount 中的自动扫描消费
-        if "/scan" in self._view_cache:
-            del self._view_cache["/scan"]
-        self.navigate_to("/scan")
-        # 尝试将窗口显示并前置
-        try:
-            self.page.window.visible = True
-            self.page.window.minimized = False
-            self.page.window.to_front()
-        except Exception:
-            pass
-        self.page.update()
+
+        async def _do():
+            self.auto_scan_path = path
+            # 强制重建 ScanView 以触发 did_mount 中的自动扫描消费
+            if "/scan" in self._view_cache:
+                del self._view_cache["/scan"]
+            self.navigate_to("/scan")
+            # 尝试将窗口显示并前置
+            try:
+                self.page.window.visible = True
+                self.page.window.minimized = False
+                self.page.window.to_front()
+            except Exception:
+                pass
+            self.page.update()
+
+        self.page.run_task(_do)
 
 
     def _window_minimize(self, e):

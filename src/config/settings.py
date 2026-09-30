@@ -280,7 +280,6 @@ SCAN_TARGETS: list[Path] = [
     Path(os.path.join(_USER_LOCAL, r"NuGet\Cache")),
     Path(os.path.join(_USER_LOCAL, r"pnpm-cache")),
     Path(os.path.join(_USER_PROFILE, r".gradle\caches")),
-    Path(os.path.join(_USER_PROFILE, r".m2\repository\_remote.repositories")),
     Path(os.path.join(_USER_PROFILE, r"go\pkg\mod\cache")),
     Path(os.path.join(_USER_PROFILE, r".cargo\registry\cache")),
     Path(os.path.join(_USER_PROFILE, r".cache\huggingface")),

@@ -208,46 +208,51 @@ class TestQueueConsumer:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Part C：端到端集成测试
+# Part C：端到端集成测试（线程回调版 ScanWorker）
 # ══════════════════════════════════════════════════════════════════════════════
 
 class TestScanWorkerIntegration:
     """
-    用临时目录模拟真实扫描，验证：
-      - 所有文件最终通过批次到达主进程
-      - done 哨兵携带正确 total
+    用临时目录模拟真实扫描，验证当前线程版 ScanWorker 回调 API：
+      - 所有文件最终通过 on_nodes 批次回调到达
+      - on_done 携带正确 total
       - NodeDict 格式完整
-      - 扫描不阻塞主线程（消费线程正常工作）
+      - 扫描不阻塞主线程
     """
 
     def _run_scan(self, root: Path) -> tuple[list[dict], dict]:
-        """在临时目录上运行完整的 Worker+Consumer，返回 (all_nodes, done_info)。"""
-        q: multiprocessing.Queue = multiprocessing.Queue()
+        """在临时目录上运行回调式 ScanWorker，返回 (all_nodes, done_info)。
+        done_info 中额外附带 _batches 供批次大小断言使用。"""
         all_nodes: list[dict] = []
+        batches: list[list] = []
         done_info: dict = {}
         finished = threading.Event()
 
-        def on_nodes(nodes):
+        def _on_nodes(nodes):
             all_nodes.extend(nodes)
+            batches.append(list(nodes))
 
-        def on_done(total, skipped):
+        def _on_done(total, skipped):
             done_info["total"] = total
             done_info["skipped"] = skipped
             finished.set()
 
-        def on_error(msg):
+        def _on_error(msg):
             done_info["error"] = msg
             finished.set()
 
-        consumer = QueueConsumer(q, on_nodes=on_nodes, on_done=on_done, on_error=on_error)
-        worker = ScanWorker(q, root=root, skip_hidden=False)
-
-        consumer.start()
+        worker = ScanWorker(
+            on_nodes=_on_nodes,
+            on_done=_on_done,
+            on_error=_on_error,
+            targets=[root],
+            skip_hidden=False,
+        )
         worker.start()
 
         finished.wait(timeout=30)
         worker.join(timeout=5)
-
+        done_info["_batches"] = batches
         return all_nodes, done_info
 
     def test_all_files_discovered(self, tmp_path):
@@ -267,7 +272,7 @@ class TestScanWorkerIntegration:
         assert len(all_nodes) == len(files)
 
     def test_done_sentinel_received(self, tmp_path):
-        """扫描完成后必须收到 done 哨兵，total >= 0。"""
+        """扫描完成后必须收到 on_done 回调，total >= 0。"""
         (tmp_path / "a.txt").write_text("x")
         _, done_info = self._run_scan(tmp_path)
 
@@ -324,22 +329,8 @@ class TestScanWorkerIntegration:
         for i in range(N):
             (tmp_path / f"file_{i:04d}.tmp").write_text(f"content_{i}")
 
-        q: multiprocessing.Queue = multiprocessing.Queue()
-        batches: list[list] = []
-        finished = threading.Event()
-
-        consumer = QueueConsumer(
-            q,
-            on_nodes=lambda nodes: batches.append(nodes),
-            on_done=lambda t, s: finished.set(),
-            on_error=lambda msg: finished.set(),
-        )
-        worker = ScanWorker(q, root=tmp_path, skip_hidden=False)
-
-        consumer.start()
-        worker.start()
-        finished.wait(timeout=30)
-        worker.join(timeout=5)
+        _, done_info = self._run_scan(tmp_path)
+        batches = done_info["_batches"]
 
         # 必须有多于一批
         assert len(batches) > 1, "文件数超过批次阈值时应分多批推送"
@@ -348,28 +339,24 @@ class TestScanWorkerIntegration:
             assert len(batch) <= SCAN_BATCH_SIZE
 
     def test_empty_dir_sends_done(self, tmp_path):
-        """空目录扫描也必须收到 done 哨兵，total=0。"""
+        """空目录扫描也必须收到 on_done 回调，total=0。"""
         _, done_info = self._run_scan(tmp_path)
         assert done_info.get("total") == 0
         assert "error" not in done_info
 
     def test_scan_does_not_block_main_thread(self, tmp_path):
-        """扫描期间主线程必须保持响应（消费线程独立运行）。"""
+        """扫描期间主线程必须保持响应（扫描线程独立运行）。"""
         for i in range(20):
             (tmp_path / f"t_{i}.tmp").write_text("x")
 
-        q: multiprocessing.Queue = multiprocessing.Queue()
         finished = threading.Event()
-
-        consumer = QueueConsumer(
-            q,
+        worker = ScanWorker(
             on_nodes=lambda _: None,
             on_done=lambda t, s: finished.set(),
             on_error=lambda _: finished.set(),
+            targets=[tmp_path],
+            skip_hidden=False,
         )
-        worker = ScanWorker(q, root=tmp_path, skip_hidden=False)
-
-        consumer.start()
         worker.start()
 
         # 主线程在 worker 运行期间做其他操作，不应被阻塞
@@ -379,5 +366,6 @@ class TestScanWorkerIntegration:
             tick += 1
             time.sleep(0.01)
 
+        worker.join(timeout=5)
         assert finished.is_set(), "扫描超时未完成"
         assert tick > 0, "主线程未能保持运行（被阻塞）"

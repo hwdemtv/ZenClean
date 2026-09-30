@@ -1,8 +1,8 @@
-# ZenClean 禅清 v0.1.4 Beta
+# ZenClean 禅清 v0.1.8-beta
 ## 软件功能说明书
 
 > **分类**: Windows 系统优化与深度清理工具
-> **版本**: v0.1.3-Beta
+> **版本**: v0.1.8-beta
 > **目标用户**: 有一定经验的 Windows 用户、IT 运维人员及性能优化极客
 > **许可协议**: MIT License
 

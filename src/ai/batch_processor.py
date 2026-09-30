@@ -85,26 +85,33 @@ class CloudBatcher:
         return {"risk_level": "ANALYZING", "ai_advice": "智能引擎研判中..."}
 
     def _worker_loop(self):
-        """后台聚合逻辑主循环"""
+        """后台聚合逻辑主循环。
+
+        性能约束：等待/睡眠绝不持有 self._lock——聚合窗口最长 0.6s，
+        若持锁睡眠会阻塞扫描线程的 submit_async 调用方，造成高频扫描时的微卡顿。
+        """
         while True:
-            batch = []
             with self._lock:
-                if not self._pending_queue:
-                    time.sleep(0.1)
-                    continue
-                
-                # 开始聚合等待
-                start_collect_time = time.time()
-                while len(self._pending_queue) < self.max_batch_size:
-                    elapsed = time.time() - start_collect_time
-                    if elapsed >= self.max_wait_time:
-                        break
-                    time.sleep(0.05)
-                
-                # 取出当前批次
+                has_pending = bool(self._pending_queue)
+            if not has_pending:
+                time.sleep(0.1)
+                continue
+
+            # 聚合等待窗口：凑满一批或超时（每轮只短暂持锁读计数）
+            start_collect_time = time.time()
+            while True:
+                with self._lock:
+                    pending_count = len(self._pending_queue)
+                if pending_count >= self.max_batch_size:
+                    break
+                if time.time() - start_collect_time >= self.max_wait_time:
+                    break
+                time.sleep(0.05)
+
+            with self._lock:
                 batch = self._pending_queue[:self.max_batch_size]
                 self._pending_queue = self._pending_queue[self.max_batch_size:]
-                
+
             if batch:
                 try:
                     self._process_batch(batch)

@@ -43,6 +43,10 @@ class SplashView(ft.Container):
         """由 app.navigate_to 在将本视图挂载到页面后调用，启动倒计时跳转。"""
         def _jump():
             time.sleep(1.5)
-            self.app.navigate_to("/scan")
+            # 后台线程不可直接切换路由（会操作 page/控件），必须回 UI 线程
+            self.app.page.run_task(self._do_jump)
 
         threading.Thread(target=_jump, daemon=True).start()
+
+    async def _do_jump(self) -> None:
+        self.app.navigate_to("/scan")

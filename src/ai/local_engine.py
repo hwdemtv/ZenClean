@@ -20,6 +20,7 @@ from typing import TypedDict
 
 from config.settings import FILE_KB_PATH, USER_DOWNLOADS_DIR
 from core import whitelist
+from ai import cloud_engine
 
 
 # ── 返回结构 ──────────────────────────────────────────────────────────────────
@@ -176,8 +177,9 @@ def dispatch(path: str, size_bytes: int = 0) -> NodeDict:
     node = analyze(path, size_bytes)
 
     if node["risk_level"] == "UNKNOWN":
-        # 正式接入真实云端引擎
-        from ai import cloud_engine
+        # 注意：cloud_engine 必须在模块级导入。若在此处惰性导入，
+        # 首次调用发生在扫描线程内，会连带触发 core.logger 的目录初始化，
+        # 在测试环境（mock os.stat）下必然抛错且被上层静默吞掉。
         sanitized = sanitize_path(path)
         cloud_result = cloud_engine.query(sanitized)
         node["ai_advice"] = cloud_result["ai_advice"]

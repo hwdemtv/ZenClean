@@ -2,4 +2,4 @@
 __version__ = "0.1.8-beta"
 __app_name__ = "ZenClean"
 __display_name__ = "禅清 (ZenClean)"
-__build_date__ = "2026-03-28"
+__build_date__ = "2026-05-09"

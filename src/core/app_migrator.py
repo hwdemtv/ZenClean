@@ -402,6 +402,10 @@ class AppMigrator:
             except Exception:
                 pass
 
+    def clear_interrupted_state(self, target_id: str) -> None:
+        """公开 API：清除指定目标的中断迁移状态（供 UI 层调用）"""
+        self._clear_state(target_id)
+
     def check_interrupted_migrations(self) -> list[dict]:
         """
         检查是否有中断的迁移任务

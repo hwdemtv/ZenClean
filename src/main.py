@@ -3,7 +3,7 @@ import sys
 import flet as ft
 print("[DEBUG] main.py imports starting...")
 from config.settings import (
-    COLOR_ZEN_BG, COLOR_ZEN_PRIMARY, WINDOW_WIDTH, WINDOW_HEIGHT
+    COLOR_ZEN_BG, COLOR_ZEN_PRIMARY, WINDOW_WIDTH, WINDOW_HEIGHT, APP_DATA_DIR
 )
 from ui.app import ZenCleanApp
 from ui.tray_manager import TrayManager
@@ -115,6 +115,26 @@ def main(page: ft.Page):
     
     # ── 4. IPC 监听守护线程（仅主实例运行） ────────────────────────────────
     _IPC_ADDR = ('127.0.0.1', 19528)
+
+    def _write_ipc_token() -> str:
+        """生成本次运行的 IPC 握手令牌并写入用户数据目录。
+
+        二次启动的实例（右键菜单拉起）读取该令牌随消息发送；
+        监听端校验失败即拒绝。防止任意本地进程向本（管理员）实例注入指令。
+        每次启动轮换令牌，避免令牌被长期复用。
+        """
+        import secrets as _secrets
+        token = _secrets.token_hex(32)
+        try:
+            APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
+            (APP_DATA_DIR / "ipc.token").write_text(token, encoding="utf-8")
+        except Exception as e:
+            print(f"[WARN] Failed to write IPC token: {e}")
+        return token
+
+    # 必须在监听线程启动前同步写好令牌，保证二次实例连接时总能读到
+    _ipc_token = _write_ipc_token()
+
     def _listen_ipc():
         from multiprocessing.connection import Listener
         from core.logger import logger
@@ -124,7 +144,11 @@ def main(page: ft.Page):
                     try:
                         with listener.accept() as conn:
                             msg = conn.recv()
-                            if isinstance(msg, dict) and msg.get('action') == 'analyze':
+                            # 握手鉴权：令牌不匹配一律拒绝（fail-closed）
+                            if not (isinstance(msg, dict) and msg.get('zenclean_ipc_token') == _ipc_token):
+                                logger.warning("IPC: rejected unauthenticated connection")
+                                continue
+                            if msg.get('action') == 'analyze':
                                 path = msg.get('path')
                                 if path and hasattr(app, "trigger_auto_scan"):
                                     app.trigger_auto_scan(path)
@@ -205,11 +229,16 @@ if __name__ == "__main__":
         # 从顶层模块获取 _auto_scan_path（因为这里的代码不在函数内，当前在 __main__ 顶级域运行）
         auto_path = getattr(_sys.modules[__name__], '_auto_scan_path', None)
         if auto_path:
-            # 通过 TCP 本地回环发送给主实例
+            # 通过 TCP 本地回环发送给主实例（携带握手令牌，见 _write_ipc_token）
             try:
                 from multiprocessing.connection import Client
+                from config.settings import APP_DATA_DIR as _APP_DIR
+                _token = ""
+                _token_file = _APP_DIR / "ipc.token"
+                if _token_file.exists():
+                    _token = _token_file.read_text(encoding="utf-8").strip()
                 with Client(('127.0.0.1', 19528)) as conn:
-                    conn.send({'action': 'analyze', 'path': auto_path})
+                    conn.send({'action': 'analyze', 'path': auto_path, 'zenclean_ipc_token': _token})
             except Exception:
                 pass # 通信失败静默退出
             sys.exit(0)

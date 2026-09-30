@@ -4,7 +4,7 @@
 
 现代 Windows C 盘深度清理与极致优化工具 —— 融合 AI 智能分诊与极客底层爆破，让您的系统回归"禅"意般的纯净。
 
-[![Status](https://img.shields.io/badge/Status-V0.1.7--beta-orange?style=flat-square)](https://github.com/hwdemtv/ZenClean/releases)
+[![Status](https://img.shields.io/badge/Status-V0.1.8--beta-orange?style=flat-square)](https://github.com/hwdemtv/ZenClean/releases)
 [![Python](https://img.shields.io/badge/Python-3.11+-1DD1A1?style=flat-square)](https://www.python.org/)
 [![UI](https://img.shields.io/badge/UI-Flet-white?style=flat-square)](https://flet.dev/)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)

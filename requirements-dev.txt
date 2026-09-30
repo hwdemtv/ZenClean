@@ -3,3 +3,6 @@ pyinstaller>=6.0
 pytest
 flake8
 black
+# 可选:源码加固方案(按需安装其一)
+# pyarmor      # scripts/obfuscate.py 需要
+# cython       # scripts/build_pyd.py 需要

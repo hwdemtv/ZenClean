@@ -85,30 +85,39 @@ class TestCloudCacheThreadSafety:
         assert len(errors) == 0, f"并发请求时发生错误: {errors}"
         assert len(results) > 0, "应该有成功的查询结果"
 
-    @patch('ai.cloud_engine.requests.post')
-    @patch('ai.cloud_engine._load_local_token')
-    def test_cache_persistence(self, mock_token, mock_post):
-        """验证缓存能够正确持久化"""
-        # 清空内存缓存
+    def test_cache_persistence(self, tmp_path):
+        """验证缓存持久化闭环：内存缓存 -> 写盘 -> (模拟重启)重新加载 -> 命中缓存直接返回"""
+        from unittest.mock import patch
+        cache_file = tmp_path / "ai_cache.json"
+
+        test_dir = "C:/Users/%USERNAME%/AppData/Local/Temp_ZenClean_Test"
+
+        # 1. 写入内存缓存并持久化到指定文件
         with cloud_engine._cache_lock:
             cloud_engine._dir_cache.clear()
+            cloud_engine._dir_cache[test_dir] = {"risk_level": "MEDIUM", "ai_advice": "cache test"}
+        with patch.object(cloud_engine, "AI_CACHE_FILE", cache_file):
+            cloud_engine._save_cache_to_disk()
+        assert cache_file.exists(), "缓存文件未写盘"
 
-        mock_token.return_value = ("token", None, None)
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.iter_lines.return_value = [
-            b'data: {"choices":[{"delta":{"content":"{\\"risk_level\\": \\"MEDIUM\\", \\"ai_advice\\": \\"cache test\\"}"}]}',
-            b'data: [DONE]'
-        ]
-        mock_post.return_value = mock_response
+        # 2. 模拟重启：清空内存缓存后从磁盘重新加载
+        with cloud_engine._cache_lock:
+            cloud_engine._dir_cache.clear()
+        with patch.object(cloud_engine, "AI_CACHE_FILE", cache_file):
+            cloud_engine._load_cache_from_disk()
+        try:
+            with cloud_engine._cache_lock:
+                assert test_dir in cloud_engine._dir_cache, "缓存从磁盘恢复失败"
 
-        test_path = "C:/Users/%USERNAME%/AppData/Local/Temp"
-
-        # 第一次查询
-        result1 = cloud_engine.query(test_path)
-
-        # 验证返回结果
-        assert result1["risk_level"] in ["LOW", "MEDIUM", "UNKNOWN"]
+            # 3. 命中缓存的查询必须同步返回真实结果（而非 ANALYZING 占位符），且不发起网络请求
+            with patch.object(cloud_engine, "_load_local_token", return_value=(None, None, None)) as m_token:
+                result = cloud_engine.query(f"{test_dir}/some_file.tmp")
+            m_token.assert_not_called()
+            assert result["risk_level"] == "MEDIUM"
+            assert result["_ai_query_key"] == test_dir
+        finally:
+            with cloud_engine._cache_lock:
+                cloud_engine._dir_cache.clear()
 
     def test_save_cache_to_disk_is_thread_safe(self):
         """验证 _save_cache_to_disk 函数是线程安全的"""

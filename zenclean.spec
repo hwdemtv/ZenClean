@@ -17,9 +17,6 @@ a = Analysis(
     hiddenimports=[
         'flet',
         'multiprocessing',
-        'structlog',
-        'pydantic',
-        'send2trash',
         'machineid',
         'packaging',
         'utils.config_crypto',

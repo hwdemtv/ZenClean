@@ -166,10 +166,17 @@ def _normalize_batch_paths(batch_results: list[dict], submitted_paths: list[str]
     return batch_results
 
 
+# 降级结果的缓存有效期（秒）：期间不重复请求失败过的目录（防止额度耗尽时疯狂重试），
+# 过期后自动放行重新分析（额度恢复/重新激活后无需重启应用）
+_FALLBACK_TTL_SECONDS = 600
+
+
 def _build_fallback_results(paths: list[str], advice: str) -> list[dict]:
-    """为所有路径构建降级结果（用于 429/401/403 等不应重试的场景）"""
+    """为所有路径构建降级结果（用于 429/401/403 等不应重试的场景）。
+    降级结果带 _fallback 标记与时间戳，query() 侧超时后自动绕过。"""
     results = []
-    fallback_base = {"risk_level": "UNKNOWN", "ai_advice": advice}
+    now = time.time()
+    fallback_base = {"risk_level": "UNKNOWN", "ai_advice": advice, "_fallback": True, "_fallback_ts": now}
     with _cache_lock:
         for path in paths:
             res = {**fallback_base, "path": path}
@@ -338,12 +345,18 @@ def query(sanitized_path: str, callback=None) -> dict:
     """
     dir_path = _get_parent_dir(sanitized_path)
 
-    # 1. 查询高速缓存
+    # 1. 查询高速缓存（降级缓存超过 TTL 后视为失效，放行重新提交分析）
     with _cache_lock:
-        if dir_path in _dir_cache:
-            result = _dir_cache[dir_path].copy()
-            result["_ai_query_key"] = dir_path
-            return result
+        cached = _dir_cache.get(dir_path)
+        if cached is not None:
+            is_stale_fallback = (
+                cached.get("_fallback")
+                and (time.time() - cached.get("_fallback_ts", 0)) > _FALLBACK_TTL_SECONDS
+            )
+            if not is_stale_fallback:
+                result = cached.copy()
+                result["_ai_query_key"] = dir_path
+                return result
 
     # 2. 异步提交到批处理队列（不再阻塞扫描器主线程）
     # 结果会先返回一个 "ANALYZING" 占位符，真实结果稍后通过缓存或回调填充。
